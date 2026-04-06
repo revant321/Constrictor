@@ -74,6 +74,13 @@ Note: siteName/username/password/title/content/category name are all encrypted s
 | 5 | NOT STARTED | Settings: lock behavior, change PIN, change master password |
 | 6 | NOT STARTED | Encrypted export/import (.constrictor files) |
 | 7 | NOT STARTED | PWA manifest, icons, UI polish, iPhone + Mac testing |
+| 8 | NOT STARTED | Drag-and-drop notes into categories, note sort modes (Date/Manual), category ordering follows sort mode |
+
+## (Phase 8 — Just Before Launch)
+
+- **Drag-and-drop notes into categories:** Drag a note onto a category chip to reassign it. Works in both sort modes.
+- **Note sort modes:** New setting — Date (default, sort by dateModified) or Manual (user-defined order via drag). Adds `order` field to notes table and `noteSortMode` to meta table.
+- **Category ordering follows sort mode:** Date mode → categories sort by dateAdded. Manual mode → categories reorderable via drag (uses existing `order` field).
 
 ## Current Session State
 

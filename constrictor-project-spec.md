@@ -214,6 +214,30 @@ Each color gets the same glass treatment (backdrop-filter, border, shadow) but w
 | 5 | Settings | Lock behavior toggle, change PIN, change master password |
 | 6 | Export/Import | Encrypted file export, import with credential prompt, merge logic |
 | 7 | PWA Polish | Manifest, icons, Liquid Glass UI polish pass, install prompt, final testing on iPhone + Mac |
+| 8 | Drag & Drop + Sort Modes (Future) | Drag-and-drop notes onto category chips to reassign, note sort modes setting (Date/Manual), manual note reordering via drag, category ordering follows sort mode |
+
+## Phase 8 — Drag & Drop + Sort Modes (Future / Post-Launch)
+
+These features are planned for after the initial launch. Do NOT implement until Phases 1–7 are complete.
+
+### 8.1 Drag and Drop Notes into Categories
+- Users can drag a note card and drop it onto a category chip to reassign its category.
+- Works regardless of the current sort mode (Date or Manual).
+- Visual feedback: category chip highlights on drag-over to indicate a valid drop target.
+- Dropping onto "All" chip removes the note's category (sets categoryId to null).
+
+### 8.2 Note Sort Modes (New Setting)
+- A new setting in the Settings tab: **Note Sort Mode** with two options:
+  - **Date** (default) — notes sorted by `dateModified` descending (newest first). This is the current behavior.
+  - **Manual** — notes get an `order` field (number) and can be reordered via drag and drop within the list.
+- When switching from Date to Manual for the first time, notes are assigned `order` values based on their current date-sorted positions.
+- The sort mode preference is stored in the `meta` table as `noteSortMode` (`"date"` | `"manual"`).
+- Schema change (future): add `order` field to `notes` table.
+
+### 8.3 Category Ordering Follows Sort Mode
+- In **Date** mode: categories sort by `dateAdded` (oldest first).
+- In **Manual** mode: categories use their existing `order` field and can be reordered via drag and drop in the Manage Categories screen.
+- The same `noteSortMode` setting controls both note and category ordering — no separate toggle.
 
 ## UI/UX Notes
 
