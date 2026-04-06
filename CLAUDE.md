@@ -1,0 +1,100 @@
+# CLAUDE.md — Constrictor
+
+> This file is auto-read by Claude Code at the start of every session. Update it after every coding session.
+
+---
+
+## Project Summary
+
+Constrictor is a local-first, encrypted password manager PWA. It stores passwords and secure notes in IndexedDB, encrypted with AES-256-GCM. Authentication requires a 6-digit PIN + master password. No cloud, no recovery, no backdoors.
+
+## Tech Stack
+
+- React 18 + TypeScript + Vite (PWA)
+- Dexie.js (IndexedDB)
+- Web Crypto API (AES-GCM + PBKDF2)
+- React Router
+- CSS with Liquid Glass-inspired styling (backdrop-filter, glassmorphism)
+
+## Key Architecture Decisions
+
+- **Encryption key derivation:** PIN + master password → PBKDF2 → AES-256-GCM key. Salt stored in `meta` table. Key held in memory only while unlocked.
+- **Verification:** A known string is encrypted during setup and stored. On login, decrypt it to verify credentials — never store credentials themselves.
+- **Individual field encryption:** Each field (siteName, username, password, title, content) is encrypted separately before storage.
+- **Lock behavior:** Configurable — lock on app close (default) or lock on background. Locking wipes the key from memory.
+- **No recovery:** If the user forgets credentials, data is unrecoverable. This is intentional.
+- **Note categories:** User-created categories with assigned colors from a fixed palette. Each color maps to a tinted glass rgba value. Category color is stored unencrypted; category name is encrypted. Notes have an optional categoryId foreign key.
+
+## Design System
+
+- Dark mode, Liquid Glass-inspired UI
+- Glass effects (backdrop-filter, translucent backgrounds) on navigation/control elements only, mirroring Apple's IOS liquid glass design
+- Content areas stay clean and flat for readability
+- Accent color: teal/blue-green
+- Background: dark gradient (navy/charcoal)
+- Min touch targets: 44x44px
+
+## File Structure
+
+```
+src/
+├── components/      UI components (PinPad, GlassCard, SearchBar, etc.)
+├── pages/           Route-level pages (SetupFlow, LockScreen, PasswordsPage, etc.)
+├── services/
+│   ├── crypto.ts    PBKDF2 key derivation, AES-GCM encrypt/decrypt
+│   ├── db.ts        Dexie database schema and operations
+│   └── auth.ts      Login, lock, key lifecycle management
+├── hooks/
+│   └── useAuth.ts   Auth state context, visibility/close lock listeners
+├── styles/
+│   └── glass.css    Liquid Glass CSS utility classes
+├── App.tsx          Router + auth gate (setup vs lock vs main)
+└── main.tsx         Entry point
+```
+
+## Dexie Schema
+
+```typescript
+meta:           key        // stores salt, verificationToken, lockBehavior, setupComplete
+passwords:      ++id, siteName, username, password, dateAdded, dateModified
+noteCategories: ++id, name, color, order, dateAdded
+notes:          ++id, categoryId, title, content, dateAdded, dateModified
+```
+
+Note: siteName/username/password/title/content/category name are all encrypted strings at rest. Category `color` is NOT encrypted (no sensitive data, needed for rendering).
+
+## Development Phases
+
+| Phase | Status | Description |
+|-------|--------|-------------|
+| 1 | NOT STARTED | Project scaffold, Dexie schema, setup flow, lock screen, key derivation |
+| 2 | NOT STARTED | Encryption utilities, per-field encrypt/decrypt, key-in-memory management |
+| 3 | NOT STARTED | Passwords CRUD, search, alphabetical list, copy, show/hide |
+| 4 | NOT STARTED | Secure notes CRUD, date-sorted list |
+| 5 | NOT STARTED | Settings: lock behavior, change PIN, change master password |
+| 6 | NOT STARTED | Encrypted export/import (.constrictor files) |
+| 7 | NOT STARTED | PWA manifest, icons, UI polish, iPhone + Mac testing |
+
+## Current Session State
+
+**Last session:** N/A — project not yet started
+**Next step:** Create GitHub repo, scaffold Vite project, install dependencies, set up folder structure
+
+## Commands
+
+```bash
+npm run dev          # Start dev server
+npm run build        # Production build
+npm run preview      # Preview production build
+```
+
+## Rules
+
+1. Always read `constrictor-project-spec.md` for full feature details before implementing.
+2. Never store raw PIN or master password anywhere — only the derived key, and only in memory.
+3. All password/note fields must be encrypted before writing to Dexie.
+4. Encryption key must be wiped from memory on lock.
+5. Use Web Crypto API — no third-party crypto libraries.
+6. Glass styling goes on navigation/controls only, never on content lists.
+7. Update this file's "Development Phases" table and "Current Session State" after every session.
+8. Explain code logic and decisions to the user — learning is a priority.
