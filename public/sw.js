@@ -26,9 +26,9 @@
 const CACHE_VERSION = 'constrictor-v1';
 
 const PRECACHE_URLS = [
-  '/',
-  '/icons/icon-192.svg',
-  '/icons/icon-512.svg',
+  '/Constrictor/',
+  '/Constrictor/icons/icon-192.svg',
+  '/Constrictor/icons/icon-512.svg',
 ];
 
 // ─── Install ─────────────────────────────────────────────────────
@@ -90,7 +90,7 @@ self.addEventListener('fetch', (event) => {
           // Network failed and not in cache — for navigation requests,
           // fall back to the cached root page (SPA routing)
           if (request.mode === 'navigate') {
-            return caches.match('/');
+            return caches.match('/Constrictor/');
           }
           // For other requests (images, etc.), just fail
           return new Response('Offline', { status: 503 });
