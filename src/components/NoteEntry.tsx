@@ -25,6 +25,7 @@ export interface DecryptedNote {
   categoryId?: number
   title: string
   content: string
+  order?: number          // Phase 8: display order for manual sort mode
   dateAdded: number
   dateModified: number
 }
@@ -33,6 +34,10 @@ interface NoteEntryProps {
   note: DecryptedNote
   category?: DecryptedCategory
   onTap: (note: DecryptedNote) => void
+  isDragging?: boolean      // This note is currently being dragged
+  isInsertTarget?: boolean  // Show insertion indicator above this note (reorder)
+  onTouchStart?: (e: React.TouchEvent) => void  // Phase 8: long-press drag initiation
+  onMouseDown?: (e: React.MouseEvent) => void   // Phase 8: mouse long-press drag initiation
 }
 
 /**
@@ -56,22 +61,32 @@ function formatDate(timestamp: number): string {
   })
 }
 
-export default function NoteEntry({ note, category, onTap }: NoteEntryProps) {
+export default function NoteEntry({ note, category, onTap, isDragging, isInsertTarget, onTouchStart, onMouseDown }: NoteEntryProps) {
   // Left border color: category color if categorized, transparent if not.
   const borderColor = category
     ? COLOR_SOLID[category.color]
-    : 'rgba(255, 255, 255, 0.06)'
+    : 'var(--separator)'
 
   // Category badge background
   const badgeBg = category
     ? COLOR_PALETTE[category.color as CategoryColor]
     : undefined
 
+  // Build className based on drag state
+  const classes = [
+    'note-item',
+    isDragging && 'note-item-dragging',
+    isInsertTarget && 'note-item-insert-target',
+  ].filter(Boolean).join(' ')
+
   return (
     <li
-      className="note-item"
+      className={classes}
+      data-note-id={note.id}
       style={{ borderLeftColor: borderColor }}
-      onClick={() => onTap(note)}
+      onClick={() => !isDragging && onTap(note)}
+      onTouchStart={onTouchStart}
+      onMouseDown={onMouseDown}
     >
       <div className="note-item-title">{note.title}</div>
       <div className="note-item-preview">{note.content}</div>

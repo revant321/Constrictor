@@ -157,16 +157,34 @@ export default function SetupFlow({ onComplete }: SetupFlowProps) {
       {/* ─── Step 1: Welcome ─────────────────────────────────────── */}
       {step === 'welcome' && (
         <div className="fade-in" style={{ textAlign: 'center', maxWidth: 340 }}>
-          {/* App icon — a simple lock symbol. We'll replace this with a
-           *  proper SVG/icon in Phase 7 (PWA polish). For now, a large
-           *  emoji does the job without adding asset dependencies. */}
-          <div style={{ fontSize: '64px', marginBottom: '24px' }}>🔐</div>
+          {/* App icon — SVG lock inside a frosted glass circle */}
+          <div style={{
+            width: '88px',
+            height: '88px',
+            borderRadius: '50%',
+            background: 'var(--glass-bg)',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+            border: '1px solid var(--glass-border)',
+            boxShadow: 'var(--glass-shadow), var(--glass-highlight)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: '24px',
+            marginLeft: 'auto',
+            marginRight: 'auto',
+          }}>
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--text-primary)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+              <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+            </svg>
+          </div>
 
           <h1 style={{
             fontSize: '28px',
             fontWeight: 700,
             marginBottom: '12px',
-            color: '#f3f4f6',
+            color: 'var(--text-primary)',
           }}>
             Welcome to Constrictor
           </h1>
@@ -174,7 +192,7 @@ export default function SetupFlow({ onComplete }: SetupFlowProps) {
           <p style={{
             fontSize: '16px',
             lineHeight: 1.5,
-            color: 'rgba(255, 255, 255, 0.6)',
+            color: 'var(--text-secondary)',
             marginBottom: '16px',
           }}>
             A secure, local-first password manager. Your data never leaves this device.
@@ -190,9 +208,9 @@ export default function SetupFlow({ onComplete }: SetupFlowProps) {
             <p style={{
               fontSize: '14px',
               lineHeight: 1.6,
-              color: 'rgba(255, 255, 255, 0.7)',
+              color: 'var(--text-secondary)',
             }}>
-              <strong style={{ color: 'rgba(244, 63, 94, 0.9)' }}>No recovery.</strong>{' '}
+              <strong style={{ color: 'var(--error-color)' }}>No recovery.</strong>{' '}
               If you forget your PIN or master password, your data cannot be recovered. This is by design — it means no one else can recover it either.
             </p>
           </div>
@@ -233,13 +251,13 @@ export default function SetupFlow({ onComplete }: SetupFlowProps) {
             fontSize: '22px',
             fontWeight: 600,
             marginBottom: '8px',
-            color: '#f3f4f6',
+            color: 'var(--text-primary)',
           }}>
             Create master password
           </h2>
           <p style={{
             fontSize: '15px',
-            color: 'rgba(255, 255, 255, 0.5)',
+            color: 'var(--text-secondary)',
             marginBottom: '32px',
           }}>
             At least 8 characters. Make it memorable — there's no reset.
@@ -261,7 +279,7 @@ export default function SetupFlow({ onComplete }: SetupFlowProps) {
             {passwordError && (
               <p style={{
                 fontSize: '14px',
-                color: 'rgba(244, 63, 94, 0.9)',
+                color: 'var(--error-color)',
                 marginBottom: '16px',
               }}>
                 {passwordError}
@@ -287,13 +305,13 @@ export default function SetupFlow({ onComplete }: SetupFlowProps) {
             fontSize: '22px',
             fontWeight: 600,
             marginBottom: '8px',
-            color: '#f3f4f6',
+            color: 'var(--text-primary)',
           }}>
             Confirm master password
           </h2>
           <p style={{
             fontSize: '15px',
-            color: 'rgba(255, 255, 255, 0.5)',
+            color: 'var(--text-secondary)',
             marginBottom: '32px',
           }}>
             Enter it one more time to make sure.
@@ -314,7 +332,7 @@ export default function SetupFlow({ onComplete }: SetupFlowProps) {
             {passwordError && (
               <p style={{
                 fontSize: '14px',
-                color: 'rgba(244, 63, 94, 0.9)',
+                color: 'var(--error-color)',
                 marginBottom: '16px',
               }}>
                 {passwordError}

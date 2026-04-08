@@ -151,7 +151,7 @@ export default function PinPad({ onComplete, error, title, subtitle }: PinPadPro
         fontSize: '22px',
         fontWeight: 600,
         marginBottom: subtitle ? '8px' : '32px',
-        color: '#f3f4f6',
+        color: 'var(--text-primary)',
       }}>
         {title}
       </h2>
@@ -160,7 +160,7 @@ export default function PinPad({ onComplete, error, title, subtitle }: PinPadPro
       {subtitle && (
         <p style={{
           fontSize: '15px',
-          color: 'rgba(255, 255, 255, 0.5)',
+          color: 'var(--text-secondary)',
           marginBottom: '32px',
         }}>
           {subtitle}

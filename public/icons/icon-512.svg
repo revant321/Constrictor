@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- Background: dark gradient matching the app's navy/charcoal theme -->
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f1117"/>
+      <stop offset="50%" stop-color="#1a1b2e"/>
+      <stop offset="100%" stop-color="#0f1117"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="102" fill="url(#bg)"/>
+
+  <!-- Lock body: rounded rectangle in teal -->
+  <rect x="163" y="240" width="186" height="152" rx="32" fill="none" stroke="#2dd4bf" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Lock shackle: the U-shaped top part -->
+  <path d="M200 240 V192 A56 56 0 0 1 312 192 V240" fill="none" stroke="#2dd4bf" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Keyhole dot -->
+  <circle cx="256" cy="306" r="16" fill="#2dd4bf"/>
+
+  <!-- Keyhole line extending down from dot -->
+  <line x1="256" y1="322" x2="256" y2="350" stroke="#2dd4bf" stroke-width="10" stroke-linecap="round"/>
+
+  <!-- Subtle glass reflection: a faint white arc near the top-left -->
+  <path d="M120 95 Q155 70 210 76" fill="none" stroke="rgba(255,255,255,0.12)" stroke-width="4" stroke-linecap="round"/>
+</svg>

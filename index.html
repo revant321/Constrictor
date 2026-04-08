@@ -3,9 +3,27 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <!-- PWA: tells Safari this site can run as a standalone app -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
+
+    <!-- PWA: status bar blends with our dark background (translucent overlay) -->
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+    <!-- PWA: theme color for the browser/status bar chrome -->
     <meta name="theme-color" content="#0f1117" />
+
+    <!-- PWA: title shown under the home screen icon on iOS -->
+    <meta name="apple-mobile-web-app-title" content="Constrictor" />
+
+    <!-- PWA: disable auto-detection of phone numbers (we store passwords, not phone numbers) -->
+    <meta name="format-detection" content="telephone=no" />
+
+    <!-- PWA: home screen icon for iOS (Safari doesn't read manifest icons) -->
+    <link rel="apple-touch-icon" href="/icons/icon-192.svg" />
+
+    <!-- PWA: web app manifest — controls install behavior, splash screen, display mode -->
+    <link rel="manifest" href="/manifest.json" />
+
     <title>Constrictor</title>
   </head>
   <body>

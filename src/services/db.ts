@@ -65,6 +65,7 @@ export interface NoteEntry {
   categoryId?: number   // FK → noteCategories.id (nullable)
   title: string         // Encrypted
   content: string       // Encrypted
+  order?: number        // Display order for manual sort mode (Phase 8)
   dateAdded: number
   dateModified: number
 }
@@ -97,21 +98,21 @@ class ConstrictorDB extends Dexie {
     // If we ever need to add tables or fields later, we add a new version()
     // block with an upgrade function — Dexie handles the migration.
     this.version(1).stores({
-      // meta: `key` is the primary key (no auto-increment — we set it ourselves)
       meta: 'key',
-
-      // passwords: auto-increment id, index siteName and dateModified
-      // We index dateModified so we can sort by "recently edited"
       passwords: '++id, siteName, dateModified',
-
-      // noteCategories: auto-increment id, index color and order
-      // Indexing order lets us retrieve categories in display order efficiently
       noteCategories: '++id, color, order',
-
-      // notes: auto-increment id, index categoryId and dateModified
-      // categoryId index lets us filter notes by category efficiently
-      // dateModified index lets us sort by "newest first"
       notes: '++id, categoryId, dateModified',
+    })
+
+    // Version 2 — Phase 8: add `order` index on notes for manual sort mode.
+    // The `order` field enables user-defined note ordering via drag-and-drop.
+    // Dexie handles this automatically — existing rows get `order: undefined`
+    // until the user switches to manual mode, at which point we assign values.
+    this.version(2).stores({
+      meta: 'key',
+      passwords: '++id, siteName, dateModified',
+      noteCategories: '++id, color, order',
+      notes: '++id, categoryId, dateModified, order',
     })
   }
 }

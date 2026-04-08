@@ -97,9 +97,9 @@ export default function AddNoteSheet({ open, onClose, onSave, editNote, categori
               <button
                 className={`category-picker-pill ${categoryId === undefined ? 'selected' : 'unselected'}`}
                 style={categoryId === undefined ? {
-                  background: 'rgba(255, 255, 255, 0.08)',
+                  background: 'var(--glass-bg)',
                 } : {
-                  background: 'rgba(255, 255, 255, 0.04)',
+                  background: 'var(--glass-bg-subtle)',
                 }}
                 onClick={() => setCategoryId(undefined)}
               >
@@ -116,7 +116,7 @@ export default function AddNoteSheet({ open, onClose, onSave, editNote, categori
                     className={`category-picker-pill ${isSelected ? 'selected' : 'unselected'}`}
                     style={isSelected ? {
                       background: rgba.replace('0.15)', '0.25)'),
-                      color: '#f3f4f6',
+                      color: 'var(--text-primary)',
                     } : {
                       background: rgba,
                     }}

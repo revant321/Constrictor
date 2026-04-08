@@ -24,14 +24,16 @@ Constrictor is a local-first, encrypted password manager PWA. It stores password
 - **Lock behavior:** Configurable — lock on app close (default) or lock on background. Locking wipes the key from memory.
 - **No recovery:** If the user forgets credentials, data is unrecoverable. This is intentional.
 - **Note categories:** User-created categories with assigned colors from a fixed palette. Each color maps to a tinted glass rgba value. Category color is stored unencrypted; category name is encrypted. Notes have an optional categoryId foreign key.
+- **Theme system:** CSS custom properties (variables) defined in `index.css`, toggled via `data-theme` attribute on `<html>`. Three-way toggle (System/Light/Dark) stored in `meta` table as `appearance`. System mode uses `prefers-color-scheme` media query + `matchMedia` listener. Theme context provided by `useTheme` hook.
 
 ## Design System
 
-- Dark mode, Liquid Glass-inspired UI
-- Glass effects (backdrop-filter, translucent backgrounds) on navigation/control elements only, mirroring Apple's IOS liquid glass design
-- Content areas stay clean and flat for readability
-- Accent color: teal/blue-green
-- Background: dark gradient (navy/charcoal)
+- Dark/Light mode with System preference support, Liquid Glass-inspired UI
+- Ambient color orbs (teal, indigo, rose radial gradients) behind content give backdrop-filter something to blur
+- All glass surfaces are white/neutral — no colored tinting. Colors only on: password avatars (gradients), note category chips, error states
+- Glass effects (backdrop-filter, translucent backgrounds, inset highlights) on navigation/control elements AND password list items (glass cards)
+- Content areas clean and readable
+- Background: dark gradient (navy/charcoal) in dark mode, light gray in light mode
 - Min touch targets: 44x44px
 
 ## File Structure
@@ -45,7 +47,8 @@ src/
 │   ├── db.ts        Dexie database schema and operations
 │   └── auth.ts      Login, lock, key lifecycle management
 ├── hooks/
-│   └── useAuth.ts   Auth state context, visibility/close lock listeners
+│   ├── useAuth.ts   Auth state context, visibility/close lock listeners
+│   └── useTheme.tsx Theme context (System/Light/Dark), data-theme on <html>
 ├── styles/
 │   └── glass.css    Liquid Glass CSS utility classes
 ├── App.tsx          Router + auth gate (setup vs lock vs main)
@@ -55,7 +58,7 @@ src/
 ## Dexie Schema
 
 ```typescript
-meta:           key        // stores salt, verificationToken, lockBehavior, setupComplete
+meta:           key        // stores salt, verificationToken, lockBehavior, setupComplete, appearance
 passwords:      ++id, siteName, username, password, dateAdded, dateModified
 noteCategories: ++id, name, color, order, dateAdded
 notes:          ++id, categoryId, title, content, dateAdded, dateModified
@@ -71,10 +74,10 @@ Note: siteName/username/password/title/content/category name are all encrypted s
 | 2 | NOT STARTED | Encryption utilities, per-field encrypt/decrypt, key-in-memory management |
 | 3 | NOT STARTED | Passwords CRUD, search, alphabetical list, copy, show/hide |
 | 4 | NOT STARTED | Secure notes CRUD, date-sorted list |
-| 5 | NOT STARTED | Settings: lock behavior, change PIN, change master password |
-| 6 | NOT STARTED | Encrypted export/import (.constrictor files) |
-| 7 | NOT STARTED | PWA manifest, icons, UI polish, iPhone + Mac testing |
-| 8 | NOT STARTED | Drag-and-drop notes into categories, note sort modes (Date/Manual), category ordering follows sort mode |
+| 5 | COMPLETE | Settings: lock behavior, change PIN, change master password |
+| 6 | COMPLETE | Encrypted export/import (.constrictor files), brute-force lockout on lock screen |
+| 7 | COMPLETE | PWA manifest, icons, UI polish, iPhone + Mac testing |
+| 8 | COMPLETE | Drag-and-drop notes into categories, note sort modes (Date/Manual), category ordering follows sort mode |
 
 ## (Phase 8 — Just Before Launch)
 
@@ -84,8 +87,8 @@ Note: siteName/username/password/title/content/category name are all encrypted s
 
 ## Current Session State
 
-**Last session:** N/A — project not yet started
-**Next step:** Create GitHub repo, scaffold Vite project, install dependencies, set up folder structure
+**Last session:** Phase 8 — Drag-and-drop notes into categories (long-press → drag → drop on chip), note sort modes (Date/Manual) setting in Settings, manual reorder via drag, category ordering follows sort mode, Dexie v2 schema with `order` on notes
+**Next step:** All phases complete. Testing, bug fixes, final polish.
 
 ## Commands
 

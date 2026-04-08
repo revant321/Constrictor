@@ -1,26 +1,19 @@
 /*
  * Phase 4 — Notes Tab Styles
  *
- * Layout hierarchy:
- *   Category chips → horizontal scroll row at top
- *   Note list → date-sorted, each with category color left-border
- *   Add/Edit sheet → bottom sheet with category picker
- *   Category manager → full-screen overlay for CRUD on categories
- *   Note detail → full-screen view/edit overlay
+ * Category chips retain their category colors (that's allowed — they're
+ * one of the three color exceptions along with avatars and errors).
+ * Everything else uses neutral glass via CSS variables.
  */
 
-/* ─── Category Chips ─────────────────────────────────────────────
- * Horizontal scrollable row of glass pill buttons. Each chip has a
- * tinted background matching its category color. "All" is always first.
- * The selected chip gets a brighter border and slightly more opaque bg.
- */
+/* ─── Category Chips ─────────────────────────────────────────────── */
 .category-chips-row {
   display: flex;
   gap: 8px;
   padding: 4px 20px 12px;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-  scrollbar-width: none; /* Firefox */
+  scrollbar-width: none;
 }
 
 .category-chips-row::-webkit-scrollbar {
@@ -49,24 +42,24 @@
   transform: scale(0.95);
 }
 
-/* Default (unselected) chip state */
 .category-chip.unselected {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.5);
+  background: var(--glass-bg-subtle);
+  border: 1px solid var(--glass-border-subtle);
+  color: var(--text-secondary);
 }
 
-/* Selected chip — brighter border + more opaque bg */
 .category-chip.selected {
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  color: #f3f4f6;
+  border: 1px solid var(--glass-border-strong);
+  color: var(--text-primary);
+  box-shadow:
+    var(--glass-shadow-sm),
+    var(--glass-highlight);
 }
 
-/* "Manage" chip — dashed border to distinguish from category chips */
 .category-chip.manage {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px dashed rgba(255, 255, 255, 0.15);
-  color: rgba(255, 255, 255, 0.4);
+  background: var(--glass-bg-subtle);
+  border: 1px dashed var(--glass-border);
+  color: var(--text-secondary);
   gap: 4px;
 }
 
@@ -78,10 +71,7 @@
   fill: none;
 }
 
-/* ─── Note List ──────────────────────────────────────────────────
- * Clean, flat list — no glass on content items per spec.
- * Each note has a left border tinted to its category color.
- */
+/* ─── Note List ──────────────────────────────────────────────────── */
 .note-list {
   list-style: none;
   padding: 0 20px;
@@ -105,42 +95,38 @@
 .note-list-empty .empty-title {
   font-size: 18px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--text-secondary);
   margin-bottom: 6px;
 }
 
 .note-list-empty .empty-subtitle {
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--text-dim);
 }
 
-/* ─── Note Item ──────────────────────────────────────────────────
- * Each note card in the list. Has a colored left border matching
- * its category. Shows title, content preview, and date.
- */
+/* ─── Note Item ──────────────────────────────────────────────────── */
 .note-item {
   position: relative;
   padding: 14px 16px;
   margin-bottom: 8px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: var(--glass-bg-subtle);
+  border: 1px solid var(--glass-border-subtle);
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   transition: background 0.15s ease;
-  /* Left border for category color — set via inline style */
   border-left-width: 3px;
   border-left-style: solid;
 }
 
 .note-item:active {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--glass-bg-hover);
 }
 
 .note-item-title {
   font-size: 16px;
-  font-weight: 600;
-  color: #f3f4f6;
+  font-weight: 600 !important;
+  color: var(--text-primary);
   margin-bottom: 4px;
   white-space: nowrap;
   overflow: hidden;
@@ -149,7 +135,8 @@
 
 .note-item-preview {
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.4);
+  font-weight: 450;
+  color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -164,7 +151,7 @@
 
 .note-item-date {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.25);
+  color: var(--text-muted);
 }
 
 .note-item-category {
@@ -172,12 +159,10 @@
   font-weight: 500;
   padding: 2px 8px;
   border-radius: 8px;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--text-secondary);
 }
 
-/* ─── Note Detail Overlay ────────────────────────────────────────
- * Full-screen view/edit for a note. Similar to PasswordDetail.
- */
+/* ─── Note Detail Overlay ────────────────────────────────────────── */
 .note-detail-content {
   flex: 1;
   overflow-y: auto;
@@ -186,8 +171,8 @@
 
 .note-detail-title {
   font-size: 24px;
-  font-weight: 700;
-  color: #f3f4f6;
+  font-weight: 800;
+  color: var(--text-primary);
   margin-bottom: 8px;
 }
 
@@ -198,28 +183,26 @@
   border-radius: 12px;
   font-size: 13px;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-secondary);
   margin-bottom: 20px;
 }
 
 .note-detail-text {
   font-size: 16px;
+  font-weight: 450;
   line-height: 1.6;
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--text-secondary);
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .note-detail-date {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.25);
+  color: var(--text-muted);
   margin-top: 24px;
 }
 
-/* ─── Category Picker (inside Add/Edit sheet) ────────────────────
- * Horizontal scrollable row of color-tinted pills for picking a
- * category when creating/editing a note.
- */
+/* ─── Category Picker ────────────────────────────────────────────── */
 .category-picker-row {
   display: flex;
   gap: 8px;
@@ -254,25 +237,23 @@
 }
 
 .category-picker-pill.selected {
-  border: 1.5px solid rgba(255, 255, 255, 0.3);
+  border: 1.5px solid var(--glass-border-strong);
 }
 
 .category-picker-pill.unselected {
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.5);
+  border: 1px solid var(--glass-border-subtle);
+  color: var(--text-secondary);
 }
 
-/* ─── Note Form Textarea ─────────────────────────────────────────
- * Textarea for note content inside the add/edit sheet.
- */
+/* ─── Note Form Textarea ─────────────────────────────────────────── */
 .form-textarea {
   width: 100%;
   min-height: 120px;
   padding: 14px 16px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
   border-radius: 12px;
-  color: #f3f4f6;
+  color: var(--text-primary);
   font-size: 16px;
   font-family: inherit;
   outline: none;
@@ -282,16 +263,14 @@
 }
 
 .form-textarea:focus {
-  border-color: rgba(45, 212, 191, 0.5);
+  border-color: var(--input-focus);
 }
 
 .form-textarea::placeholder {
-  color: rgba(255, 255, 255, 0.25);
+  color: var(--input-placeholder);
 }
 
-/* ─── Category Manager ───────────────────────────────────────────
- * Full-screen overlay for managing categories (create, rename, delete).
- */
+/* ─── Category Manager ───────────────────────────────────────────── */
 .category-manager-list {
   list-style: none;
   padding: 0;
@@ -302,7 +281,7 @@
   align-items: center;
   gap: 12px;
   padding: 14px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--separator);
 }
 
 .category-manager-color {
@@ -310,14 +289,14 @@
   height: 32px;
   border-radius: 10px;
   flex-shrink: 0;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--glass-border);
 }
 
 .category-manager-name {
   flex: 1;
   font-size: 16px;
   font-weight: 500;
-  color: #f3f4f6;
+  color: var(--text-primary);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -334,9 +313,9 @@
   width: 36px;
   height: 36px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--glass-bg-subtle);
   border: none;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--text-secondary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -346,12 +325,12 @@
 }
 
 .category-manager-btn:active {
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--glass-bg-hover);
 }
 
 .category-manager-btn.danger:active {
-  background: rgba(239, 68, 68, 0.15);
-  color: #ef4444;
+  background: var(--error-bg);
+  color: var(--error-color);
 }
 
 .category-manager-btn svg {
@@ -362,9 +341,7 @@
   fill: none;
 }
 
-/* ─── Color Picker Grid ──────────────────────────────────────────
- * Grid of color swatches for picking a category color.
- */
+/* ─── Color Picker Grid ──────────────────────────────────────────── */
 .color-picker-grid {
   display: flex;
   flex-wrap: wrap;
@@ -390,7 +367,7 @@
 }
 
 .color-swatch.selected {
-  border-color: rgba(255, 255, 255, 0.5);
+  border-color: var(--text-secondary);
 }
 
 .color-swatch svg {
@@ -401,20 +378,17 @@
   fill: none;
 }
 
-/* ─── Add Category Section ───────────────────────────────────────
- * Inline form at the bottom of the category manager for adding
- * or renaming a category.
- */
+/* ─── Add Category Section ───────────────────────────────────────── */
 .category-form-section {
   margin-top: 20px;
   padding-top: 20px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--separator);
 }
 
 .category-form-section h3 {
   font-size: 16px;
   font-weight: 600;
-  color: #f3f4f6;
+  color: var(--text-primary);
   margin-bottom: 12px;
 }
 
@@ -426,4 +400,174 @@
 
 .category-form-row .glass-btn {
   flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+ * Phase 8 — Drag & Drop Styles
+ *
+ * Three drag interactions share these styles:
+ *   1. Drag note → category chip (reassign)
+ *   2. Drag note ↕ to reorder (Manual mode)
+ *   3. Drag category ↕ to reorder in Category Manager (Manual mode)
+ * ═══════════════════════════════════════════════════════════════════ */
+
+/* ─── Drag Ghost ──────────────────────────────────────────────────
+ * The ghost is a fixed-position card that follows the finger during
+ * drag. It shows the note title so the user knows what they're moving.
+ * It sits above everything (z-index 9999) and has an elevated look
+ * with scale-up + strong shadow.
+ */
+.drag-ghost {
+  position: fixed;
+  z-index: 9999;
+  pointer-events: none;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--glass-bg-hover);
+  border: 1px solid var(--glass-border-strong);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.4),
+    0 4px 12px rgba(0, 0, 0, 0.2);
+  transform: scale(1.05);
+  max-width: 200px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  transition: opacity 0.15s ease;
+}
+
+/* ─── Note being dragged (original, dimmed) ──────────────────────
+ * While the ghost follows the finger, the original note card fades
+ * out to show it's been "picked up". The border goes dashed.
+ */
+.note-item-dragging {
+  opacity: 0.3;
+  border-style: dashed !important;
+  border-color: var(--glass-border) !important;
+}
+
+/* ─── Insert target indicator ────────────────────────────────────
+ * When reordering in Manual mode, a blue line appears above the
+ * note where the dragged note would be inserted. This uses a
+ * ::before pseudo-element for a clean horizontal rule.
+ */
+.note-item-insert-target::before {
+  content: '';
+  position: absolute;
+  top: -5px;
+  left: 0;
+  right: 0;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--accent-color, rgba(59, 130, 246, 0.8));
+  box-shadow: 0 0 8px rgba(59, 130, 246, 0.4);
+}
+
+/* ─── Category chip drop targets ─────────────────────────────────
+ * When a note is being dragged, ALL category chips pulse to signal
+ * they're valid drop targets. The `drop-target` class adds a subtle
+ * pulsing animation. `drop-target-active` intensifies the highlight
+ * when the finger is directly over a specific chip.
+ */
+.category-chip.drop-target {
+  animation: drop-target-pulse 1.2s ease-in-out infinite;
+  border-color: var(--glass-border-strong) !important;
+}
+
+.category-chip.drop-target-active {
+  animation: none;
+  transform: scale(1.08);
+  border-color: var(--text-primary) !important;
+  box-shadow:
+    0 0 12px rgba(59, 130, 246, 0.3),
+    var(--glass-shadow-sm),
+    var(--glass-highlight);
+}
+
+@keyframes drop-target-pulse {
+  0%, 100% {
+    border-color: var(--glass-border-strong);
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+  }
+  50% {
+    border-color: rgba(59, 130, 246, 0.6);
+    box-shadow: 0 0 8px rgba(59, 130, 246, 0.15);
+  }
+}
+
+/* ─── Category Manager drag styles ───────────────────────────────
+ * In Manual mode, category items in the manager are draggable.
+ * The drag handle (grip dots icon) appears on the left.
+ */
+.category-manager-item-dragging {
+  opacity: 0.3;
+  border-style: dashed;
+}
+
+.category-manager-item-insert::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: 0;
+  right: 0;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--accent-color, rgba(59, 130, 246, 0.8));
+}
+
+.category-manager-item {
+  position: relative;
+}
+
+.drag-handle {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--text-dim);
+  cursor: grab;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.drag-handle svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  stroke-width: 2;
+  fill: none;
+}
+
+/* ─── Drag overlay ───────────────────────────────────────────────
+ * A full-screen overlay during drag that prevents accidental taps
+ * on anything other than the drag interaction.
+ */
+.drag-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  touch-action: none;
+  pointer-events: none;
+}
+
+/* ─── Sort mode indicator ────────────────────────────────────────── */
+.sort-mode-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  margin-left: 12px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--glass-bg-subtle);
+  border: 1px solid var(--glass-border-subtle);
+  color: var(--text-dim);
 }

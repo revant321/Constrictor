@@ -18,15 +18,18 @@
 
 import { useState } from 'react'
 import { AuthProvider, useAuth } from './hooks/useAuth'
+import { ThemeProvider } from './hooks/useTheme'
 import SetupFlow from './pages/SetupFlow'
 import LockScreen from './pages/LockScreen'
 import PasswordsPage from './pages/PasswordsPage'
 import NotesPage from './pages/NotesPage'
 import BottomNav, { type Tab } from './components/BottomNav'
+import SettingsPage from './pages/SettingsPage'
 import SettingsGear from './components/SettingsGear'
 import './styles/glass.css'
 import './styles/passwords.css'
 import './styles/notes.css'
+import './styles/settings.css'
 
 /**
  * AuthGate — reads auth status and decides what to render.
@@ -58,25 +61,10 @@ function AuthGate() {
       {/* Two-tab bottom nav */}
       <BottomNav active={activeTab} onChange={setActiveTab} />
 
-      {/* Settings overlay — placeholder for Phase 5 */}
+      {/* Settings overlay — slides in from right like iOS navigation */}
       {settingsOpen && (
         <div className="detail-overlay open">
-          <div className="detail-header">
-            <button className="detail-back" onClick={() => setSettingsOpen(false)}>
-              <svg viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M15 18l-6-6 6-6" />
-              </svg>
-              Back
-            </button>
-          </div>
-          <div className="detail-body">
-            <div className="page-header" style={{ paddingLeft: 0 }}>
-              <h1 className="page-title">Settings</h1>
-            </div>
-            <p style={{ color: 'rgba(255,255,255,0.4)', padding: '0 0 20px', fontSize: '15px' }}>
-              Settings will be built in Phase 5 (lock behavior, change PIN, change password, export/import).
-            </p>
-          </div>
+          <SettingsPage onClose={() => setSettingsOpen(false)} />
         </div>
       )}
     </div>
@@ -85,8 +73,10 @@ function AuthGate() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AuthGate />
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <AuthGate />
+      </AuthProvider>
+    </ThemeProvider>
   )
 }

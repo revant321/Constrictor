@@ -129,44 +129,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // If we're locked or in setup, there's nothing to protect.
     if (status !== 'unlocked') return
 
-    let lockBehavior: 'close' | 'background' = 'close'
-
-    // We need to read the lock behavior from DB (async), then set up listeners.
-    // Using an IIFE (Immediately Invoked Function Expression) because useEffect
-    // callbacks can't be async directly.
     const controller = new AbortController()
 
-    ;(async () => {
-      lockBehavior = await getLockBehavior()
+    // Always attach visibilitychange — check lock behavior inside the handler.
+    // This avoids the stale-closure problem where changing the setting on the
+    // Settings page wouldn't take effect until the next lock/unlock cycle
+    // (because the old approach read lockBehavior once in an async IIFE and
+    // conditionally attached the listener, but the effect only re-ran on
+    // status changes, not setting changes).
+    document.addEventListener(
+      'visibilitychange',
+      handleVisibilityChange,
+      { signal: controller.signal },
+    )
 
-      // If the component unmounted while we were reading DB, bail out.
-      if (controller.signal.aborted) return
+    // "Lock on close" — always listen for pagehide regardless of mode.
+    // In "background" mode this is redundant (visibilitychange fires first),
+    // but it's a safety net that costs nothing.
+    window.addEventListener(
+      'pagehide',
+      handlePageHide,
+      { signal: controller.signal },
+    )
+
+    async function handleVisibilityChange() {
+      // Only lock on hide, not when coming back.
+      if (!document.hidden) return
+
+      // Read the current lock behavior from DB every time, so changes
+      // made on the Settings page take effect immediately.
+      const lockBehavior = await getLockBehavior()
 
       if (lockBehavior === 'background') {
-        // "Lock on background" — lock as soon as the page is hidden.
-        // This fires when: switching tabs, going to home screen, opening
-        // another app, or closing the browser.
-        document.addEventListener(
-          'visibilitychange',
-          handleVisibilityChange,
-          { signal: controller.signal },
-        )
-      }
-
-      // "Lock on close" — always listen for pagehide regardless of mode.
-      // In "background" mode this is redundant (visibilitychange fires first),
-      // but it's a safety net that costs nothing.
-      window.addEventListener(
-        'pagehide',
-        handlePageHide,
-        { signal: controller.signal },
-      )
-    })()
-
-    function handleVisibilityChange() {
-      // document.hidden is true when the page is not visible.
-      // We only lock when hiding, not when coming back (that would be pointless).
-      if (document.hidden) {
         authLock()
         setStatus('locked')
       }

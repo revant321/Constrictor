@@ -32,11 +32,22 @@
  *     credentials are correct, false otherwise.
  */
 
-import { useState, useCallback, type FormEvent } from 'react'
+import { useState, useEffect, useCallback, type FormEvent } from 'react'
 import PinPad from '../components/PinPad'
 import '../styles/glass.css'
 
 type Stage = 'pin' | 'password'
+
+// ─── Brute-force protection constants ─────────────────────────────
+//
+// After MAX_ATTEMPTS consecutive wrong logins, the user is locked out for
+// LOCKOUT_DURATION milliseconds. This is stored in React state (memory only)
+// — restarting the app resets the counter, which is acceptable because the
+// real protection is the encryption strength (AES-256-GCM with 600k PBKDF2
+// iterations). The lockout just slows down casual brute-force attempts.
+
+const MAX_ATTEMPTS = 5
+const LOCKOUT_DURATION = 5 * 60 * 1000 // 5 minutes in milliseconds
 
 interface LockScreenProps {
   onLogin: (pin: string, masterPassword: string) => Promise<boolean>
@@ -45,28 +56,59 @@ interface LockScreenProps {
 export default function LockScreen({ onLogin }: LockScreenProps) {
   // ── State ────────────────────────────────────────────────────────
 
-  // Which stage we're on. Starts at "pin", advances to "password" after
-  // all 6 digits are entered, resets to "pin" on failed login.
   const [stage, setStage] = useState<Stage>('pin')
-
-  // The PIN entered in stage 1. Held in memory until we pass it to login().
   const [pin, setPin] = useState('')
-
-  // The text currently in the password input (controlled input).
   const [inputValue, setInputValue] = useState('')
-
-  // Whether the PinPad should show its error state (red dots + shake).
-  // This is set to true briefly when login fails, then cleared after the
-  // shake animation finishes (PinPad handles the timing internally).
   const [pinError, setPinError] = useState(false)
-
-  // Text error message shown on the password stage when login fails.
   const [passwordError, setPasswordError] = useState('')
-
-  // Whether we're currently waiting for PBKDF2 key derivation + verification.
-  // This takes ~0.3-0.5s — during this time we disable the submit button
-  // and show "Verifying..." to prevent double-submits.
   const [verifying, setVerifying] = useState(false)
+
+  // ── Brute-force protection state ────────────────────────────────
+  //
+  // failedAttempts: incremented on each wrong login. Reset on success
+  //   or when the lockout cooldown expires.
+  //
+  // lockoutUntil: a Unix timestamp (Date.now() + 5 minutes) set when
+  //   failedAttempts reaches MAX_ATTEMPTS. While Date.now() < lockoutUntil,
+  //   the PIN pad is hidden and a countdown timer is shown instead.
+  //
+  // lockoutRemaining: milliseconds left in the lockout, updated every
+  //   second by a setInterval timer. Used to render the countdown display.
+
+  const [failedAttempts, setFailedAttempts] = useState(0)
+  const [lockoutUntil, setLockoutUntil] = useState<number | null>(null)
+  const [lockoutRemaining, setLockoutRemaining] = useState(0)
+
+  // Is the user currently locked out?
+  const isLockedOut = lockoutUntil !== null && Date.now() < lockoutUntil
+
+  // ── Lockout countdown timer ─────────────────────────────────────
+  //
+  // When lockoutUntil is set, we start a 1-second interval that updates
+  // lockoutRemaining. When it reaches 0, we clear the lockout and reset
+  // the attempt counter so the user gets 5 fresh attempts.
+
+  useEffect(() => {
+    if (!lockoutUntil) return
+
+    const update = () => {
+      const remaining = lockoutUntil - Date.now()
+      if (remaining <= 0) {
+        // Cooldown expired — let them try again with fresh attempts.
+        setLockoutUntil(null)
+        setLockoutRemaining(0)
+        setFailedAttempts(0)
+      } else {
+        setLockoutRemaining(remaining)
+      }
+    }
+
+    // Run immediately (so the display doesn't show stale values for 1s),
+    // then every second.
+    update()
+    const interval = setInterval(update, 1000)
+    return () => clearInterval(interval)
+  }, [lockoutUntil])
 
   // ── Stage 1: PIN complete ──────────────────────────────────────
 
@@ -114,51 +156,107 @@ export default function LockScreen({ onLogin }: LockScreenProps) {
       return
     }
 
-    // Login failed — reset everything and go back to PIN stage.
+    // Login failed — track the attempt for brute-force protection.
+    const newAttempts = failedAttempts + 1
+    setFailedAttempts(newAttempts)
+
+    // If they've hit the limit, start the lockout cooldown.
+    // The countdown timer (useEffect above) will handle the rest.
+    if (newAttempts >= MAX_ATTEMPTS) {
+      setLockoutUntil(Date.now() + LOCKOUT_DURATION)
+    }
+
+    // Reset everything and go back to PIN stage.
     setVerifying(false)
     setInputValue('')
     setPin('')
     setStage('pin')
 
     // Trigger the PinPad error animation after a microtask delay.
-    // We need the stage change to commit first so PinPad is mounted
-    // before it receives the error prop. Without this, React might
-    // batch the state updates and PinPad wouldn't see error go from
-    // false → true (it would just mount with error=true, which doesn't
-    // trigger its useEffect that expects a change).
     setTimeout(() => {
       setPinError(true)
-      // Clear error after the shake animation completes (~500ms in PinPad)
-      // so the prop can toggle again on future failures.
       setTimeout(() => setPinError(false), 600)
     }, 50)
-  }, [inputValue, pin, onLogin])
+  }, [inputValue, pin, onLogin, failedAttempts])
 
   // ── Render ──────────────────────────────────────────────────────
 
+  // ── Render ──────────────────────────────────────────────────────
+
+  // Format the lockout countdown as MM:SS for a clean display.
+  const lockoutMinutes = Math.floor(lockoutRemaining / 60000)
+  const lockoutSeconds = Math.floor((lockoutRemaining % 60000) / 1000)
+  const lockoutDisplay = `${lockoutMinutes}:${lockoutSeconds.toString().padStart(2, '0')}`
+
+  // Calculate lockout progress (0 → 1) for the timer bar animation.
+  // 1 = just started lockout, 0 = lockout complete.
+  const lockoutProgress = lockoutUntil
+    ? Math.max(0, (lockoutUntil - Date.now()) / LOCKOUT_DURATION)
+    : 0
+
   return (
     <div className="screen-center">
-      {/* Lock icon — visual anchor that says "this app is locked" */}
+      {/* Lock icon — SVG inside a frosted glass circle */}
       <div style={{
-        fontSize: '48px',
+        width: '80px',
+        height: '80px',
+        borderRadius: '50%',
+        background: 'var(--glass-bg)',
+        backdropFilter: 'blur(16px)',
+        WebkitBackdropFilter: 'blur(16px)',
+        border: '1px solid var(--glass-border)',
+        boxShadow: 'var(--glass-shadow), var(--glass-highlight)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
         marginBottom: '24px',
-        textAlign: 'center',
       }}>
-        🔐
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--text-primary)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+        </svg>
       </div>
 
+      {/* ── Lockout state — too many failed attempts ────────────── */}
+      {isLockedOut && (
+        <div className="lockout-container fade-in">
+          <h2 className="lockout-title">Too Many Attempts</h2>
+          <p className="lockout-subtitle">
+            Try again in
+          </p>
+          <div className="lockout-timer">{lockoutDisplay}</div>
+          <div className="lockout-bar-track">
+            <div
+              className="lockout-bar-fill"
+              style={{ width: `${lockoutProgress * 100}%` }}
+            />
+          </div>
+          <p className="lockout-hint">
+            {MAX_ATTEMPTS} consecutive failed attempts detected
+          </p>
+        </div>
+      )}
+
       {/* ── Stage 1: PIN entry ──────────────────────────────────── */}
-      {stage === 'pin' && (
-        <PinPad
-          title="Enter your PIN"
-          subtitle="Enter your 6-digit PIN to begin"
-          onComplete={handlePinComplete}
-          error={pinError}
-        />
+      {!isLockedOut && stage === 'pin' && (
+        <>
+          <PinPad
+            title="Enter your PIN"
+            subtitle="Enter your 6-digit PIN to begin"
+            onComplete={handlePinComplete}
+            error={pinError}
+          />
+          {/* Show remaining attempts warning after 3+ failures */}
+          {failedAttempts >= 3 && failedAttempts < MAX_ATTEMPTS && (
+            <p className="lockout-warning fade-in">
+              {MAX_ATTEMPTS - failedAttempts} attempt{MAX_ATTEMPTS - failedAttempts !== 1 ? 's' : ''} remaining before lockout
+            </p>
+          )}
+        </>
       )}
 
       {/* ── Stage 2: Password entry ─────────────────────────────── */}
-      {stage === 'password' && (
+      {!isLockedOut && stage === 'password' && (
         <div className="fade-in" style={{
           textAlign: 'center',
           width: '100%',
@@ -168,14 +266,14 @@ export default function LockScreen({ onLogin }: LockScreenProps) {
             fontSize: '22px',
             fontWeight: 600,
             marginBottom: '8px',
-            color: '#f3f4f6',
+            color: 'var(--text-primary)',
           }}>
             Master Password
           </h2>
 
           <p style={{
             fontSize: '15px',
-            color: 'rgba(255, 255, 255, 0.5)',
+            color: 'var(--text-secondary)',
             marginBottom: '32px',
           }}>
             Enter your master password to unlock
@@ -203,7 +301,7 @@ export default function LockScreen({ onLogin }: LockScreenProps) {
             {passwordError && (
               <p className="fade-in" style={{
                 fontSize: '14px',
-                color: 'rgba(244, 63, 94, 0.9)',
+                color: 'var(--error-color)',
                 marginBottom: '16px',
               }}>
                 {passwordError}

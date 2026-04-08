@@ -1,89 +1,83 @@
 /*
  * Liquid Glass CSS Utilities
  *
- * These classes approximate Apple's Liquid Glass aesthetic using CSS.
- * The key techniques:
- *   - backdrop-filter: blur() creates the frosted translucency
- *   - Semi-transparent rgba backgrounds let the blur show through
- *   - Subtle white borders simulate glass edges catching light
- *   - Layered box-shadows create depth and elevation
+ * ALL glass elements use white/neutral tinting only — no colored glass.
+ * The accent color (teal) only appears on interactive text labels, never
+ * on glass surfaces or icons. Colors come from: password avatars, note
+ * category chips, and error states — nothing else.
  *
- * We use -webkit-backdrop-filter alongside backdrop-filter because
- * Safari (our primary target — iPhone PWA) requires the prefix.
+ * Every glass element gets an inset highlight (top edge catch light) via
+ * the --glass-highlight variable. This simulates real glass depth.
+ *
+ * All colors reference CSS custom properties defined in index.css so that
+ * dark ↔ light mode works by swapping the data-theme attribute.
  */
 
-/* ─── Base Glass ───────────────────────────────────────────────────
- * The foundational glass effect. Used on cards, modals, nav bars.
- * Semi-transparent white background + blur + border + shadow.
- */
+/* ─── Base Glass ─────────────────────────────────────────────────── */
 .glass {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--glass-bg);
   -webkit-backdrop-filter: blur(16px);
   backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid var(--glass-border);
   border-radius: 20px;
   box-shadow:
-    0 4px 24px rgba(0, 0, 0, 0.25),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    var(--glass-shadow),
+    var(--glass-highlight);
 }
 
-/* ─── Glass Card ───────────────────────────────────────────────────
- * A padded glass container for content sections (settings, forms).
- * Adds internal spacing on top of the base glass effect.
- */
+/* ─── Glass Card ─────────────────────────────────────────────────── */
 .glass-card {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--glass-bg-subtle);
   -webkit-backdrop-filter: blur(20px);
   backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.10);
+  border: 1px solid var(--glass-border-subtle);
   border-radius: 16px;
   padding: 24px;
   box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    var(--glass-shadow-lg),
+    var(--glass-highlight);
 }
 
-/* ─── Glass Button ─────────────────────────────────────────────────
- * For action buttons (confirm, continue, etc.).
- * Slightly more opaque than cards so they stand out as interactive.
- * Uses :active instead of :hover for mobile-first interaction.
- */
+/* ─── Glass Button ───────────────────────────────────────────────── */
 .glass-btn {
-  background: rgba(255, 255, 255, 0.10);
+  background: var(--glass-bg-strong);
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid var(--glass-border);
   border-radius: 14px;
   padding: 14px 28px;
-  color: #f3f4f6;
+  color: var(--text-primary);
   font-size: 17px;
-  font-weight: 500;
+  font-weight: 600;
   font-family: inherit;
   cursor: pointer;
   transition: transform 0.15s ease, background 0.15s ease;
   -webkit-tap-highlight-color: transparent;
   min-height: 44px;
+  box-shadow:
+    var(--glass-shadow-sm),
+    var(--glass-highlight);
 }
 
 .glass-btn:active {
   transform: scale(0.97);
-  background: rgba(255, 255, 255, 0.16);
+  background: var(--glass-bg-active);
 }
 
-/* ─── Primary Button ───────────────────────────────────────────────
- * Teal-tinted glass for primary actions (setup, confirm).
- * The accent color shows through the translucent background.
+/* ─── Primary Button ─────────────────────────────────────────────
+ * Primary buttons use WHITE glass — not teal. They stand out via
+ * slightly stronger opacity and border, not color tinting.
  */
 .glass-btn-primary {
-  background: rgba(45, 212, 191, 0.20);
-  border-color: rgba(45, 212, 191, 0.30);
+  background: var(--glass-bg-hover);
+  border-color: var(--glass-border-strong);
 }
 
 .glass-btn-primary:active {
-  background: rgba(45, 212, 191, 0.30);
+  background: var(--glass-bg-active);
 }
 
-/* Disabled state — reduced opacity signals non-interactivity */
+/* Disabled state */
 .glass-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
@@ -92,29 +86,28 @@
 
 .glass-btn:disabled:active {
   transform: none;
-  background: rgba(255, 255, 255, 0.10);
+  background: var(--glass-bg-strong);
 }
 
 .glass-btn-primary:disabled:active {
-  background: rgba(45, 212, 191, 0.20);
+  background: var(--glass-bg-hover);
 }
 
-/* ─── PIN Pad Button ───────────────────────────────────────────────
- * Large circular buttons for the numeric keypad.
- * 72x72px meets the 44px minimum touch target with room to spare.
- * The circular shape mimics iOS's phone dialer / passcode screen.
- */
+/* ─── PIN Pad Button ─────────────────────────────────────────────── */
 .pin-btn {
   width: 72px;
   height: 72px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08);
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: #f3f4f6;
-  font-size: 28px;
-  font-weight: 300;
+  background: var(--glass-bg);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border);
+  box-shadow:
+    var(--glass-shadow-sm),
+    var(--glass-highlight);
+  color: var(--text-primary);
+  font-size: 30px;
+  font-weight: 400 !important;
   font-family: inherit;
   cursor: pointer;
   transition: transform 0.1s ease, background 0.1s ease;
@@ -126,44 +119,36 @@
 
 .pin-btn:active {
   transform: scale(0.92);
-  background: rgba(255, 255, 255, 0.20);
+  background: var(--glass-bg-active);
 }
 
-/* ─── PIN Dot Indicators ───────────────────────────────────────────
- * The 6 dots below the title that fill as digits are entered.
- * Empty = outline only, filled = solid teal.
- */
+/* ─── PIN Dot Indicators ─────────────────────────────────────────── */
 .pin-dot {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  border: 2px solid rgba(255, 255, 255, 0.30);
+  border: 2px solid var(--dot-border);
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .pin-dot.filled {
-  background: rgba(255, 255, 255, 0.9);
-  border-color: rgba(255, 255, 255, 0.9);
+  background: var(--dot-filled);
+  border-color: var(--dot-filled);
 }
 
-/* Error shake — applied briefly when PINs don't match */
 .pin-dot.error {
   background: rgba(244, 63, 94, 0.9);
   border-color: rgba(244, 63, 94, 0.9);
 }
 
-/* ─── Text Input (Glass-styled) ────────────────────────────────────
- * For the master password field. The spec says don't glass-ify form
- * inputs, but a subtle translucent background fits the dark theme
- * without hurting readability. The key is keeping it understated.
- */
+/* ─── Text Input (Glass-styled) ──────────────────────────────────── */
 .glass-input {
   width: 100%;
   padding: 14px 16px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
   border-radius: 12px;
-  color: #f3f4f6;
+  color: var(--text-primary);
   font-size: 17px;
   font-family: inherit;
   outline: none;
@@ -172,16 +157,14 @@
 }
 
 .glass-input:focus {
-  border-color: rgba(45, 212, 191, 0.5);
+  border-color: var(--input-focus);
 }
 
 .glass-input::placeholder {
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--input-placeholder);
 }
 
-/* ─── Layout Utilities ─────────────────────────────────────────────
- * Full-screen centered layout for lock screen, setup flow, etc.
- */
+/* ─── Layout Utilities ───────────────────────────────────────────── */
 .screen-center {
   min-height: 100dvh;
   display: flex;
@@ -193,10 +176,7 @@
   padding-bottom: env(safe-area-inset-bottom, 24px);
 }
 
-/* ─── Shake Animation ──────────────────────────────────────────────
- * Applied to the PIN dots when the entered PIN doesn't match.
- * Mimics iOS's "wrong passcode" shake. Quick and subtle.
- */
+/* ─── Shake Animation ────────────────────────────────────────────── */
 @keyframes shake {
   0%, 100% { transform: translateX(0); }
   20% { transform: translateX(-8px); }
@@ -209,9 +189,7 @@
   animation: shake 0.4s ease;
 }
 
-/* ─── Fade-in for step transitions ─────────────────────────────────
- * Each setup step fades in when it appears. Simple and clean.
- */
+/* ─── Fade-in ────────────────────────────────────────────────────── */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
@@ -219,4 +197,63 @@
 
 .fade-in {
   animation: fadeIn 0.3s ease;
+}
+
+/* ─── Lockout Screen ─────────────────────────────────────────────── */
+
+.lockout-container {
+  text-align: center;
+  width: 100%;
+  max-width: 320px;
+}
+
+.lockout-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.lockout-subtitle {
+  font-size: 15px;
+  font-weight: 450;
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+
+.lockout-timer {
+  font-size: 48px;
+  font-weight: 300;
+  color: rgba(244, 63, 94, 0.9);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 2px;
+  margin-bottom: 24px;
+}
+
+.lockout-bar-track {
+  width: 100%;
+  height: 4px;
+  background: var(--glass-bg);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+
+.lockout-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, rgba(244, 63, 94, 0.6), rgba(244, 63, 94, 0.3));
+  border-radius: 2px;
+  transition: width 1s linear;
+}
+
+.lockout-hint {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.lockout-warning {
+  font-size: 13px;
+  color: rgba(244, 63, 94, 0.8);
+  margin-top: 20px;
+  text-align: center;
 }

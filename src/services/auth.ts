@@ -22,6 +22,8 @@ import { db } from './db'
 import {
   generateSalt,
   deriveKey,
+  encrypt,
+  decrypt,
   createVerificationToken,
   verifyCredentials,
 } from './crypto'
@@ -227,4 +229,201 @@ export async function isSetupComplete(): Promise<boolean> {
 export async function getLockBehavior(): Promise<'close' | 'background'> {
   const entry = await db.meta.get('lockBehavior')
   return (entry?.value as 'close' | 'background') ?? 'close'
+}
+
+// ─── Settings ─────────────────────────────────────────────────────
+
+/**
+ * Updates the lock behavior preference.
+ *
+ * This just writes to the meta table. The useAuth hook re-reads this
+ * value whenever it sets up lock listeners, so the change takes effect
+ * the next time those listeners are re-attached (which happens whenever
+ * auth status changes — e.g., after the next lock/unlock cycle).
+ */
+export async function setLockBehavior(behavior: 'close' | 'background'): Promise<void> {
+  await db.meta.put({ key: 'lockBehavior', value: behavior })
+}
+
+// ─── Note Sort Mode ─────────────────────────────────────────────
+
+export type NoteSortMode = 'date' | 'manual'
+
+/**
+ * Reads the user's preferred note sort mode from the meta table.
+ * Defaults to 'date' (sort by dateModified, newest first) — the
+ * behavior from before Phase 8 existed.
+ */
+export async function getNoteSortMode(): Promise<NoteSortMode> {
+  const entry = await db.meta.get('noteSortMode')
+  return (entry?.value as NoteSortMode) ?? 'date'
+}
+
+/**
+ * Persists the note sort mode preference. When switching to 'manual'
+ * for the first time, the caller should also initialize order values
+ * on all notes (see NotesPage.initializeNoteOrders).
+ */
+export async function setNoteSortMode(mode: NoteSortMode): Promise<void> {
+  await db.meta.put({ key: 'noteSortMode', value: mode })
+}
+
+/**
+ * Changes the user's PIN while keeping the same master password.
+ *
+ * This is the most complex operation in the app because changing the PIN
+ * means the derived encryption key changes — and every encrypted field
+ * in the vault was encrypted with the OLD key. So we must:
+ *
+ *   1. Verify the current credentials (ensure the user is who they claim)
+ *   2. Derive the OLD key from current PIN + password
+ *   3. Derive a NEW key from new PIN + same password + same salt
+ *   4. Decrypt every encrypted field with the old key
+ *   5. Re-encrypt every field with the new key
+ *   6. Create a new verification token with the new key
+ *   7. Write everything back in a single transaction
+ *   8. Update the in-memory key
+ *
+ * The salt stays the same — it's device-bound, not credential-bound.
+ * We do everything in a Dexie transaction so if anything fails, the
+ * database rolls back to its previous state (no half-re-encrypted data).
+ *
+ * @returns true if successful, false if current credentials are wrong
+ */
+export async function changePin(
+  currentPin: string,
+  currentPassword: string,
+  newPin: string,
+): Promise<boolean> {
+  return reEncryptVault(currentPin, currentPassword, newPin, currentPassword)
+}
+
+/**
+ * Changes the master password. Same re-encryption flow as changePin,
+ * but the password changes instead of the PIN.
+ */
+export async function changePassword(
+  currentPin: string,
+  currentPassword: string,
+  newPassword: string,
+): Promise<boolean> {
+  return reEncryptVault(currentPin, currentPassword, currentPin, newPassword)
+}
+
+/**
+ * Core re-encryption logic shared by changePin and changePassword.
+ *
+ * Why a shared function? Both operations follow the exact same pattern:
+ * verify old creds → derive new key → re-encrypt everything. The only
+ * difference is which credential changes.
+ *
+ * The re-encryption happens in a Dexie transaction, which means:
+ *   - All reads and writes are atomic — either everything succeeds or
+ *     everything rolls back
+ *   - No other code can see a half-re-encrypted vault
+ *   - If the browser crashes mid-operation, the old data is intact
+ *
+ * Performance note: with hundreds of entries, this could take a few seconds
+ * because each encrypt/decrypt is an async Web Crypto operation. For a
+ * personal password manager this is fine — it's a rare operation.
+ */
+async function reEncryptVault(
+  currentPin: string,
+  currentPassword: string,
+  newPin: string,
+  newPassword: string,
+): Promise<boolean> {
+  // Step 1: Read salt and verification token.
+  const saltEntry = await db.meta.get('salt')
+  const tokenEntry = await db.meta.get('verificationToken')
+  if (!saltEntry || !tokenEntry) return false
+
+  const salt = new Uint8Array(saltEntry.value as number[])
+
+  // Step 2: Derive the old key and verify credentials.
+  const oldKey = await deriveKey(currentPin, currentPassword, salt)
+  const isValid = await verifyCredentials(tokenEntry.value as string, oldKey)
+  if (!isValid) return false
+
+  // Step 3: Derive the new key from the new credentials + same salt.
+  const newKey = await deriveKey(newPin, newPassword, salt)
+
+  // Step 4: Read all vault data, decrypt with old key, re-encrypt with new key.
+  //
+  // We read all data BEFORE starting the transaction write. This avoids
+  // issues with async operations inside Dexie transactions (Dexie uses
+  // microtask scheduling that can conflict with Web Crypto promises).
+
+  const passwords = await db.passwords.toArray()
+  const notes = await db.notes.toArray()
+  const categories = await db.noteCategories.toArray()
+
+  // Re-encrypt password entries.
+  // Each entry has three encrypted fields: siteName, username, password.
+  const reEncryptedPasswords = await Promise.all(
+    passwords.map(async (entry) => {
+      const plainSite = await decrypt(entry.siteName, oldKey)
+      const plainUser = await decrypt(entry.username, oldKey)
+      const plainPass = await decrypt(entry.password, oldKey)
+
+      return {
+        ...entry,
+        siteName: await encrypt(plainSite, newKey),
+        username: await encrypt(plainUser, newKey),
+        password: await encrypt(plainPass, newKey),
+      }
+    }),
+  )
+
+  // Re-encrypt note entries (title + content).
+  const reEncryptedNotes = await Promise.all(
+    notes.map(async (entry) => {
+      const plainTitle = await decrypt(entry.title, oldKey)
+      const plainContent = await decrypt(entry.content, oldKey)
+
+      return {
+        ...entry,
+        title: await encrypt(plainTitle, newKey),
+        content: await encrypt(plainContent, newKey),
+      }
+    }),
+  )
+
+  // Re-encrypt category names (color is NOT encrypted).
+  const reEncryptedCategories = await Promise.all(
+    categories.map(async (entry) => {
+      const plainName = await decrypt(entry.name, oldKey)
+
+      return {
+        ...entry,
+        name: await encrypt(plainName, newKey),
+      }
+    }),
+  )
+
+  // Step 5: Create a new verification token with the new key.
+  const newToken = await createVerificationToken(newKey)
+
+  // Step 6: Write everything back in a transaction.
+  // Dexie's transaction ensures atomicity — all or nothing.
+  await db.transaction('rw', [db.meta, db.passwords, db.notes, db.noteCategories], async () => {
+    // Update verification token.
+    await db.meta.put({ key: 'verificationToken', value: newToken })
+
+    // Bulk-put re-encrypted entries (put = update if id exists).
+    if (reEncryptedPasswords.length > 0) {
+      await db.passwords.bulkPut(reEncryptedPasswords)
+    }
+    if (reEncryptedNotes.length > 0) {
+      await db.notes.bulkPut(reEncryptedNotes)
+    }
+    if (reEncryptedCategories.length > 0) {
+      await db.noteCategories.bulkPut(reEncryptedCategories)
+    }
+  })
+
+  // Step 7: Update the in-memory key.
+  encryptionKey = newKey
+
+  return true
 }

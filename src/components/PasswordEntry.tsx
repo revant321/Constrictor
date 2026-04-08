@@ -43,18 +43,19 @@ interface PasswordEntryProps {
 }
 
 /**
- * Generates a consistent HSL color from a string.
- * Same site name always gets the same color — we hash the string to a hue.
- * The saturation and lightness are fixed for a pleasant, muted palette
- * that works on dark backgrounds.
+ * Generates a consistent gradient from a string.
+ * Same site name always gets the same gradient — we hash the string to two
+ * hues 40deg apart, creating a diagonal gradient. Gradients add more depth
+ * and visual interest than flat solid colors.
  */
-function avatarColor(name: string): string {
+function avatarGradient(name: string): string {
   let hash = 0
   for (let i = 0; i < name.length; i++) {
     hash = name.charCodeAt(i) + ((hash << 5) - hash)
   }
-  const hue = Math.abs(hash) % 360
-  return `hsl(${hue}, 55%, 45%)`
+  const hue1 = Math.abs(hash) % 360
+  const hue2 = (hue1 + 40) % 360
+  return `linear-gradient(135deg, hsl(${hue1}, 65%, 50%), hsl(${hue2}, 55%, 40%))`
 }
 
 const SWIPE_THRESHOLD = 80
@@ -62,6 +63,7 @@ const SWIPE_THRESHOLD = 80
 export default function PasswordEntry({ entry, onTap, onDelete }: PasswordEntryProps) {
   const [offset, setOffset] = useState(0)
   const [swiped, setSwiped] = useState(false)
+  const [animating, setAnimating] = useState(false)
   const startXRef = useRef(0)
   const startOffsetRef = useRef(0)
   const movingRef = useRef(false)
@@ -70,22 +72,20 @@ export default function PasswordEntry({ entry, onTap, onDelete }: PasswordEntryP
     startXRef.current = e.touches[0].clientX
     startOffsetRef.current = swiped ? -SWIPE_THRESHOLD : 0
     movingRef.current = false
+    // Remove transition so dragging feels immediate
+    setAnimating(false)
   }, [swiped])
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     const deltaX = e.touches[0].clientX - startXRef.current
-    // Only count as a move if we've swiped at least 5px — prevents
-    // accidental swipes when the user meant to tap.
     if (Math.abs(deltaX) > 5) movingRef.current = true
-
-    // Calculate new offset. Clamp between -SWIPE_THRESHOLD and 0
-    // (can't swipe right past origin, can't swipe left past the delete button).
     const newOffset = Math.max(-SWIPE_THRESHOLD, Math.min(0, startOffsetRef.current + deltaX))
     setOffset(newOffset)
   }, [])
 
   const handleTouchEnd = useCallback(() => {
-    // If swiped past half the threshold, snap open. Otherwise snap closed.
+    // Enable transition for snap animation
+    setAnimating(true)
     if (offset < -SWIPE_THRESHOLD / 2) {
       setOffset(-SWIPE_THRESHOLD)
       setSwiped(true)
@@ -95,11 +95,19 @@ export default function PasswordEntry({ entry, onTap, onDelete }: PasswordEntryP
     }
   }, [offset])
 
-  const handleTap = useCallback(() => {
-    // If we were swiping (not tapping), don't open the detail view.
+  /**
+   * Handle tap on the inner (visible) area.
+   * Three cases:
+   *   1. User was swiping (movingRef true) → do nothing, the swipe gesture
+   *      already handled everything in touchEnd.
+   *   2. Delete button is showing (swiped true) → close the swipe, don't
+   *      open detail view.
+   *   3. Normal tap → open detail view.
+   */
+  const handleInnerClick = useCallback(() => {
     if (movingRef.current) return
-    // If the delete button is showing, close it on tap instead of opening detail.
     if (swiped) {
+      setAnimating(true)
       setOffset(0)
       setSwiped(false)
       return
@@ -107,30 +115,40 @@ export default function PasswordEntry({ entry, onTap, onDelete }: PasswordEntryP
     onTap(entry)
   }, [swiped, entry, onTap])
 
-  const handleDelete = useCallback(() => {
+  /**
+   * Handle tap on the red delete button.
+   * This is a completely separate click handler on a separate element —
+   * it never conflicts with handleInnerClick because the inner element
+   * has translated away, leaving the delete button exposed.
+   */
+  const handleDeleteClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
     onDelete(entry.id)
   }, [entry.id, onDelete])
 
   const firstLetter = entry.siteName.charAt(0).toUpperCase()
-  const bgColor = avatarColor(entry.siteName)
+  const bgGradient = avatarGradient(entry.siteName)
 
   return (
     <li className="password-item">
       {/* Red delete button behind the content */}
-      <div className="swipe-bg" onClick={handleDelete}>
+      <div className="swipe-bg" onClick={handleDeleteClick}>
         Delete
       </div>
 
-      {/* Visible content — slides left on swipe */}
+      {/* Visible content — slides left on swipe to reveal delete button */}
       <div
         className="password-item-inner"
-        style={{ transform: `translateX(${offset}px)` }}
+        style={{
+          transform: `translateX(${offset}px)`,
+          transition: animating ? 'transform 0.2s ease' : 'none',
+        }}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        onClick={handleTap}
+        onClick={handleInnerClick}
       >
-        <div className="password-avatar" style={{ background: bgColor }}>
+        <div className="password-avatar" style={{ background: bgGradient }}>
           {firstLetter}
         </div>
         <div className="password-item-text">
@@ -142,6 +160,15 @@ export default function PasswordEntry({ entry, onTap, onDelete }: PasswordEntryP
             <path d="M9 18l6-6-6-6" />
           </svg>
         </div>
+        <button
+          className="password-hover-delete"
+          onClick={(e) => {
+            e.stopPropagation()
+            onDelete(entry.id)
+          }}
+        >
+          Delete
+        </button>
       </div>
     </li>
   )

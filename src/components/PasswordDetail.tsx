@@ -27,17 +27,17 @@ interface PasswordDetailProps {
 }
 
 /**
- * Same avatar color function as PasswordEntry — we duplicate it here
- * rather than creating a shared utility because it's 4 lines and only
- * used in two places. Premature abstraction would be worse.
+ * Same avatar gradient function as PasswordEntry — duplicated here
+ * since it's small and only used in two places.
  */
-function avatarColor(name: string): string {
+function avatarGradient(name: string): string {
   let hash = 0
   for (let i = 0; i < name.length; i++) {
     hash = name.charCodeAt(i) + ((hash << 5) - hash)
   }
-  const hue = Math.abs(hash) % 360
-  return `hsl(${hue}, 55%, 45%)`
+  const hue1 = Math.abs(hash) % 360
+  const hue2 = (hue1 + 40) % 360
+  return `linear-gradient(135deg, hsl(${hue1}, 65%, 50%), hsl(${hue2}, 55%, 40%))`
 }
 
 export default function PasswordDetail({ entry, onClose, onEdit, onDelete, onToast }: PasswordDetailProps) {
@@ -89,7 +89,7 @@ export default function PasswordDetail({ entry, onClose, onEdit, onDelete, onToa
       <div className="detail-body">
         {/* Avatar + site name */}
         <div className="detail-avatar-section">
-          <div className="detail-avatar" style={{ background: avatarColor(entry.siteName) }}>
+          <div className="detail-avatar" style={{ background: avatarGradient(entry.siteName) }}>
             {firstLetter}
           </div>
           <div className="detail-site-name">{entry.siteName}</div>

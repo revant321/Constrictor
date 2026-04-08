@@ -11,3 +11,21 @@ createRoot(document.getElementById('root')!).render(
     </BrowserRouter>
   </StrictMode>,
 )
+
+/**
+ * Service Worker Registration
+ *
+ * We register the SW after the app renders (not blocking the initial paint).
+ * The SW file lives in /public/sw.js — Vite serves it at the root.
+ *
+ * Only register in production — in dev mode, the SW would cache stale
+ * assets and break hot module replacement (HMR). We check that the
+ * serviceWorker API exists (it doesn't in some browsers or non-HTTPS contexts).
+ */
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch((err) => {
+      console.warn('SW registration failed:', err)
+    })
+  })
+}
