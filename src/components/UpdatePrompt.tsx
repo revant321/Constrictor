@@ -16,10 +16,12 @@
  * a deliberate choice rather than an accidental tap.
  */
 
+import { useState } from 'react'
 import { useServiceWorker } from '../hooks/useServiceWorker'
 
 export default function UpdatePrompt() {
   const { acceptUpdate, dismissUpdate } = useServiceWorker()
+  const [confirming, setConfirming] = useState(false)
 
   return (
     <div className="update-prompt-backdrop">
@@ -32,24 +34,50 @@ export default function UpdatePrompt() {
             <line x1="12" y1="15" x2="12" y2="3" />
           </svg>
         </div>
-        <h2 className="update-prompt-title">An update is available</h2>
-        <p className="update-prompt-description">
-          Accept the update to get the latest version. The app will reload briefly.
-        </p>
-        <div className="update-prompt-actions">
-          <button
-            className="glass-btn update-prompt-dismiss"
-            onClick={dismissUpdate}
-          >
-            Not Now
-          </button>
-          <button
-            className="glass-btn glass-btn-primary update-prompt-accept"
-            onClick={acceptUpdate}
-          >
-            Accept
-          </button>
-        </div>
+
+        {!confirming ? (
+          <>
+            <h2 className="update-prompt-title">An update is available</h2>
+            <p className="update-prompt-description">
+              Accept the update to get the latest version. The app will reload briefly.
+            </p>
+            <div className="update-prompt-actions">
+              <button
+                className="glass-btn update-prompt-dismiss"
+                onClick={dismissUpdate}
+              >
+                Not Now
+              </button>
+              <button
+                className="glass-btn glass-btn-primary update-prompt-accept"
+                onClick={() => setConfirming(true)}
+              >
+                Accept
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <h2 className="update-prompt-title">Update now?</h2>
+            <p className="update-prompt-description">
+              The app will reload and any unsaved changes will be lost. Continue?
+            </p>
+            <div className="update-prompt-actions">
+              <button
+                className="glass-btn update-prompt-dismiss"
+                onClick={() => setConfirming(false)}
+              >
+                Go Back
+              </button>
+              <button
+                className="glass-btn glass-btn-primary update-prompt-accept"
+                onClick={acceptUpdate}
+              >
+                Update Now
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
