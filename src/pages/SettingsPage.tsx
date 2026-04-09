@@ -679,7 +679,7 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
 
           {/* Version info — small footer */}
           <div className="settings-footer">
-            Constrictor v1.0 — Local-first, zero-knowledge
+            Constrictor v1.1 — Local-first, zero-knowledge
           </div>
         </div>
       </>
