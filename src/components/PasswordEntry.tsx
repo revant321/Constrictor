@@ -68,12 +68,12 @@ export default function PasswordEntry({ entry, onTap, onDelete }: PasswordEntryP
   const startXRef = useRef(0)
   const startOffsetRef = useRef(0)
   const movingRef = useRef(false)
+  const currentOffsetRef = useRef(0)
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     startXRef.current = e.touches[0].clientX
     startOffsetRef.current = swiped ? -SWIPE_THRESHOLD : 0
     movingRef.current = false
-    // Remove transition so dragging feels immediate
     setAnimating(false)
   }, [swiped])
 
@@ -81,20 +81,23 @@ export default function PasswordEntry({ entry, onTap, onDelete }: PasswordEntryP
     const deltaX = e.touches[0].clientX - startXRef.current
     if (Math.abs(deltaX) > 5) movingRef.current = true
     const newOffset = Math.max(-SWIPE_THRESHOLD, Math.min(0, startOffsetRef.current + deltaX))
+    currentOffsetRef.current = newOffset
     setOffset(newOffset)
   }, [])
 
   const handleTouchEnd = useCallback(() => {
-    // Enable transition for snap animation
     setAnimating(true)
-    if (offset < -SWIPE_THRESHOLD / 2) {
+    // Use the ref to avoid stale closure — state may not have flushed yet
+    if (currentOffsetRef.current < -SWIPE_THRESHOLD / 2) {
+      currentOffsetRef.current = -SWIPE_THRESHOLD
       setOffset(-SWIPE_THRESHOLD)
       setSwiped(true)
     } else {
+      currentOffsetRef.current = 0
       setOffset(0)
       setSwiped(false)
     }
-  }, [offset])
+  }, [])
 
   /**
    * Handle tap on the inner (visible) area.
