@@ -23,7 +23,7 @@
  * load instantly from cache every time.
  */
 
-const CACHE_VERSION = 'constrictor-v1.2';
+const CACHE_VERSION = 'constrictor-v1.3';
 
 const PRECACHE_URLS = [
   '/Constrictor/',
