@@ -39,6 +39,13 @@ import {
   setNoteSortMode,
   type NoteSortMode,
 } from '../services/auth'
+import {
+  canUseBiometrics,
+  isBiometricsEnabled,
+  enrollBiometric,
+  disableBiometric,
+  getBiometricType,
+} from '../services/biometrics'
 import { db } from '../services/db'
 import { exportVault, importVault } from '../services/vault'
 import { useAuth } from '../hooks/useAuth'
@@ -101,6 +108,73 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
 
     await setNoteSortMode(mode)
     setNoteSortModeState(mode)
+  }
+
+  // ─── Biometric unlock state ────────────────────────────────────────
+  //
+  // Three pieces of state:
+  //   - deviceSupportsBiometrics: whether the hardware + browser support it.
+  //     If false, we hide the toggle entirely (no point showing an option
+  //     the user can't use). Checked once on mount via canUseBiometrics().
+  //
+  //   - biometricsEnabled: whether the user has turned it on. Read from the
+  //     database on mount.
+  //
+  //   - biometricToggling: true while the WebAuthn enrollment prompt is active.
+  //     Prevents the toggle from being clicked again during the Face ID /
+  //     Touch ID dialog.
+
+  const [deviceSupportsBiometrics, setDeviceSupportsBiometrics] = useState(false)
+  const [biometricsEnabled, setBiometricsEnabled] = useState(false)
+  const [biometricToggling, setBiometricToggling] = useState(false)
+  const [biometricToast, setBiometricToast] = useState<'success' | 'error' | null>(null)
+  const [biometricToastMessage, setBiometricToastMessage] = useState('')
+
+  useEffect(() => {
+    // Check both device capability and current enabled state in parallel.
+    Promise.all([canUseBiometrics(), isBiometricsEnabled()]).then(
+      ([capable, enabled]) => {
+        setDeviceSupportsBiometrics(capable)
+        setBiometricsEnabled(enabled)
+      }
+    )
+  }, [])
+
+  /**
+   * Toggle handler for biometric unlock.
+   *
+   * Enabling: triggers WebAuthn credential creation (Face ID / Touch ID prompt).
+   *   If the user completes the biometric prompt, the credential is stored
+   *   and the flag is set. If they cancel or it fails, we show an error toast.
+   *
+   * Disabling: just clears the database entries. No biometric prompt needed
+   *   because the user is already unlocked (they passed PIN + password to
+   *   get into Settings).
+   */
+  const handleToggleBiometrics = async () => {
+    if (biometricToggling) return
+
+    if (biometricsEnabled) {
+      // Disabling — simple database cleanup.
+      await disableBiometric()
+      setBiometricsEnabled(false)
+      return
+    }
+
+    // Enabling — trigger the WebAuthn enrollment flow.
+    setBiometricToggling(true)
+    try {
+      await enrollBiometric()
+      setBiometricsEnabled(true)
+      setBiometricToast('success')
+      setBiometricToastMessage(`${getBiometricType()} enabled`)
+    } catch {
+      setBiometricToast('error')
+      setBiometricToastMessage('Biometric setup failed')
+    } finally {
+      setBiometricToggling(false)
+      setTimeout(() => setBiometricToast(null), 3000)
+    }
   }
 
   // ─── Sub-view navigation ──────────────────────────────────────────
@@ -482,6 +556,51 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
             </div>
           </div>
 
+          {/* ── Biometric Unlock Section (Phase 9) ─────────────────────
+           *
+           * Only rendered if the device supports platform biometrics
+           * (Face ID on iPhone, Touch ID on Mac). If the hardware doesn't
+           * support it or the page isn't served over HTTPS, this section
+           * is completely hidden — no confusing greyed-out toggles.
+           *
+           * The toggle triggers WebAuthn credential creation when enabling
+           * (which shows the Face ID / Touch ID prompt), and just clears
+           * the database when disabling (no prompt needed since the user
+           * is already authenticated).
+           */}
+          {deviceSupportsBiometrics && (
+            <div className="settings-section">
+              <h3 className="settings-section-title">Biometric Unlock</h3>
+
+              <div className="glass-card settings-card">
+                <div className="settings-row">
+                  <div className="settings-row-text">
+                    <div className="settings-row-label">{getBiometricType()}</div>
+                    <div className="settings-row-description">
+                      Require {getBiometricType()} as the first step before PIN and password
+                    </div>
+                  </div>
+                  <button
+                    className={`settings-toggle ${biometricsEnabled ? 'active' : ''}`}
+                    onClick={handleToggleBiometrics}
+                    disabled={biometricToggling}
+                    aria-label={`${biometricsEnabled ? 'Disable' : 'Enable'} ${getBiometricType()}`}
+                    style={biometricToggling ? { opacity: 0.5 } : undefined}
+                  >
+                    <div className="settings-toggle-knob" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Toast feedback for biometric enrollment/disable */}
+              {biometricToast && (
+                <div className={`settings-toast fade-in ${biometricToast === 'error' ? 'settings-toast-error' : ''}`}>
+                  {biometricToastMessage}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ── Notes Section (Phase 8) ────────────────────────────────
            *
            * Sort mode toggle: Date (default) vs Manual.
@@ -679,7 +798,7 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
 
           {/* Version info — small footer */}
           <div className="settings-footer">
-            Constrictor v1.5 — Update protection
+            Constrictor v2.0 — Added Face ID + Touch ID
           </div>
         </div>
       </>

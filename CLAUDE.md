@@ -6,7 +6,7 @@
 
 ## Project Summary
 
-Constrictor is a local-first, encrypted password manager PWA. It stores passwords and secure notes in IndexedDB, encrypted with AES-256-GCM. Authentication requires a 6-digit PIN + master password. No cloud, no recovery, no backdoors.
+Constrictor is a local-first, encrypted password manager PWA. It stores passwords and secure notes in IndexedDB, encrypted with AES-256-GCM. Authentication requires an optional biometric check (Face ID / Touch ID) + 6-digit PIN + master password. No cloud, no recovery, no backdoors.
 
 ## Tech Stack
 
@@ -25,6 +25,7 @@ Constrictor is a local-first, encrypted password manager PWA. It stores password
 - **No recovery:** If the user forgets credentials, data is unrecoverable. This is intentional.
 - **Note categories:** User-created categories with assigned colors from a fixed palette. Each color maps to a tinted glass rgba value. Category color is stored unencrypted; category name is encrypted. Notes have an optional categoryId foreign key.
 - **Theme system:** CSS custom properties (variables) defined in `index.css`, toggled via `data-theme` attribute on `<html>`. Three-way toggle (System/Light/Dark) stored in `meta` table as `appearance`. System mode uses `prefers-color-scheme` media query + `matchMedia` listener. Theme context provided by `useTheme` hook.
+- **Biometric authentication (Phase 9):** Optional Face ID / Touch ID via WebAuthn API as the first unlock gate before PIN + password. Uses `navigator.credentials.create()` for enrollment and `navigator.credentials.get()` for verification with `authenticatorAttachment: 'platform'` and `userVerification: 'required'`. Credential ID stored in `meta` table (not sensitive). WebAuthn challenge is random and not server-verified — used purely for local biometric gating. Falls back gracefully when device lacks biometric hardware or page is served over HTTP.
 
 ## Design System
 
@@ -43,9 +44,10 @@ src/
 ├── components/      UI components (PinPad, GlassCard, SearchBar, etc.)
 ├── pages/           Route-level pages (SetupFlow, LockScreen, PasswordsPage, etc.)
 ├── services/
-│   ├── crypto.ts    PBKDF2 key derivation, AES-GCM encrypt/decrypt
-│   ├── db.ts        Dexie database schema and operations
-│   └── auth.ts      Login, lock, key lifecycle management
+│   ├── crypto.ts      PBKDF2 key derivation, AES-GCM encrypt/decrypt
+│   ├── db.ts          Dexie database schema and operations
+│   ├── auth.ts        Login, lock, key lifecycle management
+│   └── biometrics.ts  WebAuthn Face ID / Touch ID enrollment + verification
 ├── hooks/
 │   ├── useAuth.ts   Auth state context, visibility/close lock listeners
 │   └── useTheme.tsx Theme context (System/Light/Dark), data-theme on <html>
@@ -64,6 +66,8 @@ noteCategories: ++id, name, color, order, dateAdded
 notes:          ++id, categoryId, title, content, dateAdded, dateModified
 ```
 
+Meta keys include: `salt`, `verificationToken`, `lockBehavior`, `setupComplete`, `appearance`, `noteSortMode`, `biometricsEnabled`, `biometricCredentialId`.
+
 Note: siteName/username/password/title/content/category name are all encrypted strings at rest. Category `color` is NOT encrypted (no sensitive data, needed for rendering).
 
 ## Development Phases
@@ -78,6 +82,7 @@ Note: siteName/username/password/title/content/category name are all encrypted s
 | 6 | COMPLETE | Encrypted export/import (.constrictor files), brute-force lockout on lock screen |
 | 7 | COMPLETE | PWA manifest, icons, UI polish, iPhone + Mac testing |
 | 8 | COMPLETE | Drag-and-drop notes into categories, note sort modes (Date/Manual), category ordering follows sort mode |
+| 9 | COMPLETE | Biometric authentication (Face ID / Touch ID) as optional first unlock step via WebAuthn |
 
 ## (Phase 8 — Just Before Launch)
 
@@ -87,7 +92,7 @@ Note: siteName/username/password/title/content/category name are all encrypted s
 
 ## Current Session State
 
-**Last session:** Phase 8 — Drag-and-drop notes into categories (long-press → drag → drop on chip), note sort modes (Date/Manual) setting in Settings, manual reorder via drag, category ordering follows sort mode, Dexie v2 schema with `order` on notes
+**Last session:** Phase 9 — Biometric authentication (Face ID / Touch ID) via WebAuthn as optional first unlock step. New biometrics.ts service, lock screen biometric stage, Settings toggle. Three-stage unlock: biometric → PIN → password.
 **Next step:** All phases complete. Testing, bug fixes, final polish.
 
 ## Commands
