@@ -375,6 +375,10 @@ export default function NotesPage() {
           clearTimeout(longPressTimerRef.current)
           longPressTimerRef.current = null
         }
+      } else if (longPressTimerRef.current) {
+        // Long-press timer still active — prevent default to block iOS
+        // text selection/callout that would otherwise start during the hold.
+        preventDefault()
       }
       return
     }
