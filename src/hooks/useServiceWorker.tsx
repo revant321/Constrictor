@@ -67,6 +67,20 @@ export function ServiceWorkerProvider({ children }: { children: ReactNode }) {
     // Only relevant in production — dev mode doesn't register a SW
     if (!('serviceWorker' in navigator) || !import.meta.env.PROD) return
 
+    /**
+     * Helper — watch a SW that's installing and promote it to
+     * "update available" once it reaches the 'installed' (waiting) state.
+     */
+    function watchInstalling(worker: ServiceWorker, registration: ServiceWorkerRegistration) {
+      worker.addEventListener('statechange', () => {
+        if (worker.state === 'installed' && registration.active) {
+          setWaitingWorker(worker)
+          setUpdateAvailable(true)
+          setUpdateDismissed(false)
+        }
+      })
+    }
+
     // Get the existing registration. navigator.serviceWorker.ready
     // resolves when there's an active SW controlling the page.
     navigator.serviceWorker.ready.then((registration) => {
@@ -77,27 +91,28 @@ export function ServiceWorkerProvider({ children }: { children: ReactNode }) {
       if (registration.waiting) {
         setWaitingWorker(registration.waiting)
         setUpdateAvailable(true)
+        return
       }
 
-      // Case 2: A new SW finishes installing while the page is open.
-      // The 'updatefound' event fires when the browser detects a new
-      // SW script. We then listen for that new SW's state to change
-      // to 'installed' (= waiting).
+      // Case 2: A SW is currently installing (the browser started the
+      // update check during navigation, before React mounted). The
+      // 'updatefound' event already fired, so we'd miss it if we only
+      // listened for future events. Watch this worker's state directly.
+      if (registration.installing) {
+        watchInstalling(registration.installing, registration)
+      }
+
+      // Case 3: A new SW starts installing in the future (e.g., the
+      // browser's 24-hour recheck, or a manual registration.update()).
       registration.addEventListener('updatefound', () => {
         const newWorker = registration.installing
         if (!newWorker) return
-
-        newWorker.addEventListener('statechange', () => {
-          // 'installed' means the SW has finished installing and is
-          // now waiting. But only show the prompt if there's already
-          // an active SW (i.e., this is an UPDATE, not the first install).
-          if (newWorker.state === 'installed' && registration.active) {
-            setWaitingWorker(newWorker)
-            setUpdateAvailable(true)
-            setUpdateDismissed(false) // Reset dismissal for new updates
-          }
-        })
+        watchInstalling(newWorker, registration)
       })
+
+      // Proactively check for updates — don't rely solely on the
+      // browser's automatic check, which may be delayed or cached.
+      registration.update()
     })
   }, [])
 
