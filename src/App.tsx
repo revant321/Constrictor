@@ -19,6 +19,7 @@
 import { useState } from 'react'
 import { AuthProvider, useAuth } from './hooks/useAuth'
 import { ThemeProvider } from './hooks/useTheme'
+import { ServiceWorkerProvider, useServiceWorker } from './hooks/useServiceWorker'
 import SetupFlow from './pages/SetupFlow'
 import LockScreen from './pages/LockScreen'
 import PasswordsPage from './pages/PasswordsPage'
@@ -26,6 +27,7 @@ import NotesPage from './pages/NotesPage'
 import BottomNav, { type Tab } from './components/BottomNav'
 import SettingsPage from './pages/SettingsPage'
 import SettingsGear from './components/SettingsGear'
+import UpdatePrompt from './components/UpdatePrompt'
 import './styles/glass.css'
 import './styles/passwords.css'
 import './styles/notes.css'
@@ -38,8 +40,15 @@ import './styles/settings.css'
  */
 function AuthGate() {
   const { status, setup, login } = useAuth()
+  const { updateAvailable, updateDismissed } = useServiceWorker()
   const [activeTab, setActiveTab] = useState<Tab>('passwords')
   const [settingsOpen, setSettingsOpen] = useState(false)
+
+  // Should we show the update prompt?
+  // Yes if: there's an update available AND the user hasn't dismissed it yet.
+  // We only show it when unlocked — showing it on the lock screen would be
+  // distracting and the user hasn't proven their identity yet.
+  const showUpdatePrompt = status === 'unlocked' && updateAvailable && !updateDismissed
 
   if (status === 'loading') return null
   if (status === 'needs-setup') return <SetupFlow onComplete={setup} />
@@ -67,6 +76,10 @@ function AuthGate() {
           <SettingsPage onClose={() => setSettingsOpen(false)} />
         </div>
       )}
+
+      {/* Update prompt — glass-styled modal shown after login when a
+       * new SW version is waiting. Rendered last so it sits on top. */}
+      {showUpdatePrompt && <UpdatePrompt />}
     </div>
   )
 }
@@ -74,9 +87,11 @@ function AuthGate() {
 export default function App() {
   return (
     <ThemeProvider>
-      <AuthProvider>
-        <AuthGate />
-      </AuthProvider>
+      <ServiceWorkerProvider>
+        <AuthProvider>
+          <AuthGate />
+        </AuthProvider>
+      </ServiceWorkerProvider>
     </ThemeProvider>
   )
 }

@@ -43,6 +43,7 @@ import { db } from '../services/db'
 import { exportVault, importVault } from '../services/vault'
 import { useAuth } from '../hooks/useAuth'
 import { useTheme, type Appearance } from '../hooks/useTheme'
+import { useServiceWorker } from '../hooks/useServiceWorker'
 import '../styles/glass.css'
 
 type SettingsView = 'main' | 'change-pin' | 'change-password' | 'import-vault'
@@ -50,6 +51,7 @@ type SettingsView = 'main' | 'change-pin' | 'change-password' | 'import-vault'
 export default function SettingsPage({ onClose }: { onClose: () => void }) {
   const { lock } = useAuth()
   const { appearance, setAppearance } = useTheme()
+  const { updateAvailable, updateDismissed, acceptUpdate } = useServiceWorker()
 
   // ─── Lock behavior state ──────────────────────────────────────────
   const [lockBehavior, setLockBehaviorState] = useState<'close' | 'background'>('close')
@@ -407,6 +409,44 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
           <div className="page-header" style={{ paddingLeft: 0 }}>
             <h1 className="page-title">Settings</h1>
           </div>
+
+          {/* ── App Update Card ────────────────────────────────────────
+           *
+           * Only shown when the user dismissed the update prompt ("Not Now").
+           * Tapping it sends SKIP_WAITING to the waiting SW, same as the
+           * "Accept" button on the prompt. The card disappears when there's
+           * no update or the user hasn't dismissed the prompt yet (because
+           * the modal prompt handles it in that case).
+           */}
+          {updateAvailable && updateDismissed && (
+            <div className="settings-section">
+              <div
+                className="glass-card settings-card settings-card-tappable settings-update-card"
+                onClick={acceptUpdate}
+              >
+                <div className="settings-row">
+                  <div className="settings-row-icon">
+                    <svg viewBox="0 0 24 24">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="7 10 12 15 17 10" />
+                      <line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                  </div>
+                  <div className="settings-row-text">
+                    <div className="settings-row-label">App Update Available</div>
+                    <div className="settings-row-description">
+                      Tap to update and reload
+                    </div>
+                  </div>
+                  <div className="settings-row-chevron">
+                    <svg viewBox="0 0 24 24">
+                      <polyline points="9 18 15 12 9 6" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* ── Appearance Section ───────────────────────────────────
            *

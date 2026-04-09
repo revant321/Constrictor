@@ -32,14 +32,26 @@ const PRECACHE_URLS = [
 ];
 
 // ─── Install ─────────────────────────────────────────────────────
-// Pre-cache essential assets. skipWaiting() activates immediately
-// instead of waiting for all tabs to close.
+// Pre-cache essential assets. We do NOT call skipWaiting() here —
+// the new SW waits in the "waiting" state until the user explicitly
+// approves the update from the UI. This prevents the app from
+// reloading out from under the user mid-session.
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_VERSION)
       .then((cache) => cache.addAll(PRECACHE_URLS))
-      .then(() => self.skipWaiting())
   );
+});
+
+// ─── Message ─────────────────────────────────────────────────────
+// When the UI sends a SKIP_WAITING message (user accepted the update),
+// call skipWaiting() to promote this waiting SW to active. The browser
+// then fires a 'controllerchange' event on all controlled pages,
+// which our main.tsx listener uses to reload.
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 // ─── Activate ────────────────────────────────────────────────────
