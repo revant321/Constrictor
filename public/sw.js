@@ -1,7 +1,17 @@
 /**
  * Service Worker — offline caching for Constrictor PWA.
  *
- * Strategy: Cache-first for the app shell.
+ * Strategy: Two-tier caching.
+ *
+ *   - Navigation requests (HTML): NETWORK-FIRST.
+ *     Always try the network so the browser gets the latest index.html
+ *     (which references the correct hashed JS/CSS bundles). Fall back
+ *     to the cached copy only when offline.
+ *
+ *   - Static assets (JS/CSS/images): CACHE-FIRST.
+ *     Vite adds content hashes to filenames (index-a1b2c3.js), so a
+ *     cached copy is always valid — the filename changes when the
+ *     content changes. This makes loads instant from cache.
  *
  * How it works:
  *   1. On INSTALL: we pre-cache the root HTML page and icons.
@@ -11,22 +21,18 @@
  *   2. On ACTIVATE: we delete any old caches from previous versions.
  *      Bumping CACHE_VERSION forces a full cache refresh.
  *
- *   3. On FETCH: we check the cache first. If we have a cached response,
- *      return it immediately (fast!). If not, fetch from network, cache
- *      the response for next time, and return it. If both cache and
- *      network fail, fall back to the cached root page (SPA — the router
- *      handles all routes from index.html).
- *
- * Why cache-first? Constrictor is a local-first app with no server API.
- * All data lives in IndexedDB. The only thing we fetch from the network
- * is the app shell itself (HTML/JS/CSS). Once cached, the app should
- * load instantly from cache every time.
+ *   3. On FETCH: navigation requests use network-first (fall back to
+ *      cached /Constrictor/index.html for SPA routing). Asset requests
+ *      use cache-first (fall back to network, then cache the response).
  */
 
-const CACHE_VERSION = 'constrictor-v1.3';
+const CACHE_VERSION = 'constrictor-v1.4';
+
+const INDEX_HTML = '/Constrictor/index.html';
 
 const PRECACHE_URLS = [
   '/Constrictor/',
+  INDEX_HTML,
   '/Constrictor/icons/icon-192.svg',
   '/Constrictor/icons/icon-512.svg',
 ];
@@ -70,15 +76,47 @@ self.addEventListener('activate', (event) => {
 });
 
 // ─── Fetch ───────────────────────────────────────────────────────
-// Cache-first: serve from cache if available, otherwise fetch from
-// network and cache the response. Navigation requests (page loads)
-// fall back to the cached root page for SPA routing.
+// Two strategies:
+//   Navigation (HTML): network-first → cache fallback (SPA index.html)
+//   Assets (JS/CSS/img): cache-first → network fallback
 self.addEventListener('fetch', (event) => {
   const { request } = event;
 
   // Only handle GET requests (not POST, etc.)
   if (request.method !== 'GET') return;
 
+  if (request.mode === 'navigate') {
+    // ── Navigation: network-first ──
+    // Always try the network so we get the latest index.html (which
+    // references the correct hashed JS/CSS bundles). If the network
+    // returns a non-200 (e.g., 404 for an SPA route like /passwords),
+    // fall back to the cached index.html — React Router handles routing.
+    // If the network is down entirely, same fallback.
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          if (response.status === 200) {
+            const responseToCache = response.clone();
+            caches.open(CACHE_VERSION).then((cache) => {
+              cache.put(request, responseToCache);
+            });
+            return response;
+          }
+          // Server returned 404/500/etc — serve cached index.html
+          // (SPA routing: React Router will handle the path)
+          return caches.match(INDEX_HTML) || caches.match('/Constrictor/');
+        })
+        .catch(() => {
+          // Network is down — serve cached index.html for offline use
+          return caches.match(INDEX_HTML) || caches.match('/Constrictor/');
+        })
+    );
+    return;
+  }
+
+  // ── Assets: cache-first ──
+  // Vite hashes filenames (index-a1b2c3.js), so a cached copy is
+  // always correct — the hash changes when the content changes.
   event.respondWith(
     caches.match(request).then((cached) => {
       if (cached) return cached;
@@ -99,12 +137,7 @@ self.addEventListener('fetch', (event) => {
           return response;
         })
         .catch(() => {
-          // Network failed and not in cache — for navigation requests,
-          // fall back to the cached root page (SPA routing)
-          if (request.mode === 'navigate') {
-            return caches.match('/Constrictor/');
-          }
-          // For other requests (images, etc.), just fail
+          // Asset not in cache and network failed
           return new Response('Offline', { status: 503 });
         });
     })
