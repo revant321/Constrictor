@@ -679,7 +679,7 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
 
           {/* Version info — small footer */}
           <div className="settings-footer">
-            Constrictor v1.4 — Update protection
+            Constrictor v1.5 — Update protection
           </div>
         </div>
       </>
