@@ -20,12 +20,13 @@ import type { DecryptedPassword } from './PasswordEntry'
 interface AddPasswordSheetProps {
   open: boolean
   onClose: () => void
-  onSave: (siteName: string, username: string, password: string) => void
+  onSave: (siteName: string, siteUrl: string, username: string, password: string) => void
   editEntry: DecryptedPassword | null  // null = add mode, non-null = edit mode
 }
 
 export default function AddPasswordSheet({ open, onClose, onSave, editEntry }: AddPasswordSheetProps) {
   const [siteName, setSiteName] = useState('')
+  const [siteUrl, setSiteUrl] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
 
@@ -35,15 +36,16 @@ export default function AddPasswordSheet({ open, onClose, onSave, editEntry }: A
   useEffect(() => {
     if (open) {
       setSiteName(editEntry?.siteName ?? '')
+      setSiteUrl(editEntry?.siteUrl ?? '')
       setUsername(editEntry?.username ?? '')
       setPassword(editEntry?.password ?? '')
     }
   }, [open, editEntry])
 
   const handleSave = () => {
-    // Basic validation — all fields required.
+    // Basic validation — site name, username, password required. URL is optional.
     if (!siteName.trim() || !username.trim() || !password.trim()) return
-    onSave(siteName.trim(), username.trim(), password.trim())
+    onSave(siteName.trim(), siteUrl.trim(), username.trim(), password.trim())
   }
 
   const isValid = siteName.trim() && username.trim() && password.trim()
@@ -73,6 +75,17 @@ export default function AddPasswordSheet({ open, onClose, onSave, editEntry }: A
             onChange={(e) => setSiteName(e.target.value)}
             placeholder="e.g. Netflix"
             autoFocus={open && !editEntry}
+          />
+        </div>
+
+        <div className="form-group">
+          <label className="form-label">Site URL</label>
+          <input
+            className="form-input"
+            type="url"
+            value={siteUrl}
+            onChange={(e) => setSiteUrl(e.target.value)}
+            placeholder="e.g. https://netflix.com"
           />
         </div>
 

@@ -73,14 +73,16 @@ export default function PasswordsPage() {
     // For each row, we decrypt its 3 encrypted fields in parallel too.
     const decrypted = await Promise.all(
       rows.map(async (row) => {
-        const [siteName, username, password] = await Promise.all([
+        const [siteName, siteUrl, username, password] = await Promise.all([
           decrypt(row.siteName, key),
+          row.siteUrl ? decrypt(row.siteUrl, key) : Promise.resolve(''),
           decrypt(row.username, key),
           decrypt(row.password, key),
         ])
         return {
           id: row.id!,
           siteName,
+          siteUrl,
           username,
           password,
           dateAdded: row.dateAdded,
@@ -113,13 +115,14 @@ export default function PasswordsPage() {
   // plaintext didn't. This is actually a security feature: it prevents
   // an observer from knowing whether a field was modified.
 
-  const handleSave = useCallback(async (siteName: string, username: string, password: string) => {
+  const handleSave = useCallback(async (siteName: string, siteUrl: string, username: string, password: string) => {
     const key = getKey()
     if (!key) return
 
-    // Encrypt all three fields in parallel.
-    const [encSite, encUser, encPass] = await Promise.all([
+    // Encrypt all fields in parallel. siteUrl is optional — only encrypt if provided.
+    const [encSite, encUrl, encUser, encPass] = await Promise.all([
       encrypt(siteName, key),
+      siteUrl ? encrypt(siteUrl, key) : Promise.resolve(undefined),
       encrypt(username, key),
       encrypt(password, key),
     ])
@@ -130,6 +133,7 @@ export default function PasswordsPage() {
       // Edit mode — update the existing row in Dexie.
       await db.passwords.update(editEntry.id, {
         siteName: encSite,
+        siteUrl: encUrl,
         username: encUser,
         password: encPass,
         dateModified: now,
@@ -138,6 +142,7 @@ export default function PasswordsPage() {
       // Add mode — insert a new row.
       await db.passwords.add({
         siteName: encSite,
+        siteUrl: encUrl,
         username: encUser,
         password: encPass,
         dateAdded: now,

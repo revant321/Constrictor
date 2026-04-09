@@ -87,12 +87,22 @@ export default function PasswordDetail({ entry, onClose, onEdit, onDelete, onToa
       </div>
 
       <div className="detail-body">
-        {/* Avatar + site name */}
+        {/* Avatar + site name + URL */}
         <div className="detail-avatar-section">
           <div className="detail-avatar" style={{ background: avatarGradient(entry.siteName) }}>
             {firstLetter}
           </div>
           <div className="detail-site-name">{entry.siteName}</div>
+          {entry.siteUrl && (
+            <a
+              className="detail-site-url"
+              href={entry.siteUrl.startsWith('http') ? entry.siteUrl : `https://${entry.siteUrl}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {entry.siteUrl}
+            </a>
+          )}
         </div>
 
         {/* Username field */}

@@ -30,6 +30,7 @@ import { useRef, useState, useCallback } from 'react'
 export interface DecryptedPassword {
   id: number
   siteName: string
+  siteUrl: string
   username: string
   password: string
   dateAdded: number

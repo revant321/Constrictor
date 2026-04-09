@@ -53,6 +53,7 @@ interface ConstrictorFile {
 interface VaultData {
   passwords: Array<{
     siteName: string
+    siteUrl?: string
     username: string
     password: string
     dateAdded: number
@@ -114,6 +115,7 @@ export async function exportVault(): Promise<void> {
   const decryptedPasswords = await Promise.all(
     passwords.map(async (p) => ({
       siteName: await decrypt(p.siteName, key),
+      siteUrl: p.siteUrl ? await decrypt(p.siteUrl, key) : undefined,
       username: await decrypt(p.username, key),
       password: await decrypt(p.password, key),
       dateAdded: p.dateAdded,
@@ -353,6 +355,7 @@ export async function importVault(
   const encryptedPasswords = await Promise.all(
     newPasswords.map(async (p) => ({
       siteName: await encrypt(p.siteName, localKey),
+      siteUrl: p.siteUrl ? await encrypt(p.siteUrl, localKey) : undefined,
       username: await encrypt(p.username, localKey),
       password: await encrypt(p.password, localKey),
       dateAdded: p.dateAdded,
