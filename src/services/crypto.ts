@@ -112,10 +112,19 @@ export async function deriveKey(
   // Step 4: Run PBKDF2 to derive the actual AES key.
   // This is the slow, intentional part — 600,000 rounds of SHA-256.
   // The salt ensures uniqueness; the iterations ensure brute-force resistance.
+  //
+  // IMPORTANT: We construct a fresh Uint8Array from the salt and pass its
+  // .buffer. iOS Safari's Web Crypto is strict about ArrayBuffer ownership —
+  // if the original Uint8Array is a view into a larger buffer (e.g., from a
+  // slice, subarray, or a different execution context like FileReader), the
+  // .buffer property references the ENTIRE backing ArrayBuffer, not just the
+  // view. This causes "operation failed" errors on iOS. Creating a fresh copy
+  // guarantees the buffer starts at byte offset 0 and is exactly the right size.
+  const freshSalt = new Uint8Array(salt)
   return crypto.subtle.deriveKey(
     {
       name: 'PBKDF2',
-      salt: salt.buffer as ArrayBuffer,
+      salt: freshSalt.buffer,
       iterations: PBKDF2_ITERATIONS,
       hash: 'SHA-256',
     },

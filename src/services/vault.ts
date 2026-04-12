@@ -254,11 +254,15 @@ export async function importVault(
   let sourceKey: CryptoKey
   try {
     console.log('Import: deriving key')
-    const sourceSalt = base64ToUint8(file.salt)
+    const rawSalt = base64ToUint8(file.salt)
     // Validate salt is a reasonable length (our PBKDF2 uses 16-byte salts)
-    if (sourceSalt.length === 0) {
+    if (rawSalt.length === 0) {
       throw new Error('Salt decoded to empty array — possible base64 corruption')
     }
+    // Construct a fresh Uint8Array — iOS Safari requires the backing ArrayBuffer
+    // to be owned by this context. base64ToUint8 already creates a new one, but
+    // we double-ensure with new Uint8Array(raw) for safety.
+    const sourceSalt = new Uint8Array(rawSalt)
     sourceKey = await deriveKey(pin, masterPassword, sourceSalt)
   } catch (err) {
     console.error('Import: deriving key failed', err)
@@ -274,12 +278,15 @@ export async function importVault(
   let decryptedBytes: ArrayBuffer
   try {
     console.log('Import: decrypting')
-    const iv = base64ToUint8(file.iv)
-    const ciphertext = base64ToUint8(file.data)
+    // Construct fresh Uint8Arrays — iOS Safari's Web Crypto is strict about
+    // ArrayBuffer ownership. Passing a typed array that's a view into a larger
+    // buffer (or from a different execution context) causes "operation failed".
+    const iv = new Uint8Array(base64ToUint8(file.iv))
+    const ciphertext = new Uint8Array(base64ToUint8(file.data))
     decryptedBytes = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv: iv as BufferSource },
+      { name: 'AES-GCM', iv },
       sourceKey,
-      ciphertext as BufferSource,
+      ciphertext,
     )
   } catch (err) {
     console.error('Import: decrypting failed', err)
@@ -304,106 +311,157 @@ export async function importVault(
 
   // ── Stage 4: Re-encrypt with local key ─────────────────────────
   //
-  // Decrypt existing vault entries for duplicate detection, then
-  // re-encrypt imported entries with the local device's key.
+  // Each entry is re-encrypted individually with its own try/catch so
+  // one bad entry doesn't kill the whole import. Fields are validated
+  // before encryption — iOS Safari's Web Crypto throws opaque "operation
+  // failed" errors when encrypt() receives undefined/null/non-string values.
 
-  let encryptedPasswords: Array<{
-    siteName: string; siteUrl?: string; username: string;
-    password: string; dateAdded: number; dateModified: number
-  }> = []
-  let encryptedNotes: Array<{
-    categoryId?: number; title: string; content: string;
-    dateAdded: number; dateModified: number
-  }> = []
+  console.log('Import: re-encrypting')
+
+  const existingPasswords = await db.passwords.toArray()
+  const existingNotes = await db.notes.toArray()
+  const existingCategories = await db.noteCategories.toArray()
+
+  // Build Sets of "siteName|username" for password dedup.
+  const existingPasswordKeys = new Set<string>()
+  for (const p of existingPasswords) {
+    const site = await decrypt(p.siteName, localKey)
+    const user = await decrypt(p.username, localKey)
+    existingPasswordKeys.add(`${site}|${user}`)
+  }
+
+  // Build Sets of "title|content" for note dedup.
+  const existingNoteKeys = new Set<string>()
+  for (const n of existingNotes) {
+    const title = await decrypt(n.title, localKey)
+    const content = await decrypt(n.content, localKey)
+    existingNoteKeys.add(`${title}|${content}`)
+  }
+
+  // Build a Map of decrypted category name → existing local ID for category dedup.
+  const existingCategoryMap = new Map<string, number>()
+  for (const c of existingCategories) {
+    const name = await decrypt(c.name, localKey)
+    existingCategoryMap.set(name, c.id!)
+  }
+
+  // ── Insert categories first (to get new IDs for mapping) ───────
+
+  const categoryIdMap = new Map<number, number>()
   let categoriesAdded = 0
 
-  try {
-    console.log('Import: re-encrypting')
-
-    const existingPasswords = await db.passwords.toArray()
-    const existingNotes = await db.notes.toArray()
-    const existingCategories = await db.noteCategories.toArray()
-
-    // Build Sets of "siteName|username" for password dedup.
-    const existingPasswordKeys = new Set<string>()
-    for (const p of existingPasswords) {
-      const site = await decrypt(p.siteName, localKey)
-      const user = await decrypt(p.username, localKey)
-      existingPasswordKeys.add(`${site}|${user}`)
-    }
-
-    // Build Sets of "title|content" for note dedup.
-    const existingNoteKeys = new Set<string>()
-    for (const n of existingNotes) {
-      const title = await decrypt(n.title, localKey)
-      const content = await decrypt(n.content, localKey)
-      existingNoteKeys.add(`${title}|${content}`)
-    }
-
-    // Build a Map of decrypted category name → existing local ID for category dedup.
-    const existingCategoryMap = new Map<string, number>()
-    for (const c of existingCategories) {
-      const name = await decrypt(c.name, localKey)
-      existingCategoryMap.set(name, c.id!)
-    }
-
-    // ── Insert categories first (to get new IDs for mapping) ───────
-
-    const categoryIdMap = new Map<number, number>()
-
-    for (const cat of vaultData.noteCategories) {
-      const existingId = existingCategoryMap.get(cat.name)
+  for (let i = 0; i < (vaultData.noteCategories || []).length; i++) {
+    const cat = vaultData.noteCategories[i]
+    try {
+      const catName = cat.name ?? ''
+      console.log(`Import: re-encrypting category ${i} name="${catName}"`)
+      const existingId = existingCategoryMap.get(catName)
       if (existingId != null) {
         categoryIdMap.set(cat.id, existingId)
       } else {
         const newId = await db.noteCategories.add({
-          name: await encrypt(cat.name, localKey),
-          color: cat.color,
-          order: cat.order,
-          dateAdded: cat.dateAdded,
+          name: await encrypt(catName, localKey),
+          color: cat.color || 'blue',
+          order: cat.order ?? i,
+          dateAdded: cat.dateAdded ?? Date.now(),
         })
         categoryIdMap.set(cat.id, newId)
         categoriesAdded++
       }
+    } catch (err) {
+      console.error(`Import: category ${i} failed (name="${cat.name}")`, err)
+      // Skip this category — notes referencing it will become uncategorized.
     }
+  }
 
-    // ── Re-encrypt notes (with remapped categoryIds, skipping duplicates) ──
+  // ── Re-encrypt notes (with remapped categoryIds, skipping duplicates) ──
 
-    const newNotes = vaultData.notes.filter(
-      (n) => !existingNoteKeys.has(`${n.title}|${n.content}`),
-    )
+  const newNotes = (vaultData.notes || []).filter(
+    (n) => !existingNoteKeys.has(`${n.title}|${n.content}`),
+  )
 
-    encryptedNotes = await Promise.all(
-      newNotes.map(async (n) => ({
+  type EncryptedNote = {
+    categoryId?: number; title: string; content: string;
+    dateAdded: number; dateModified: number
+  }
+  const encryptedNotes: EncryptedNote[] = []
+
+  for (let i = 0; i < newNotes.length; i++) {
+    const n = newNotes[i]
+    try {
+      // Validate required fields — coerce undefined/null to empty string.
+      // iOS Safari's Web Crypto throws an opaque error if TextEncoder.encode()
+      // receives a non-string value (undefined becomes "undefined" on desktop
+      // Chrome/Safari but can fail on iOS).
+      const title = typeof n.title === 'string' ? n.title : (n.title ?? '')
+      const content = typeof n.content === 'string' ? n.content : (n.content ?? '')
+
+      console.log(`Import: re-encrypting note ${i} title="${title.slice(0, 30)}"`)
+
+      encryptedNotes.push({
         categoryId: n.categoryId != null
           ? categoryIdMap.get(n.categoryId)
           : undefined,
-        title: await encrypt(n.title, localKey),
-        content: await encrypt(n.content, localKey),
-        dateAdded: n.dateAdded,
-        dateModified: n.dateModified,
-      })),
-    )
+        title: await encrypt(String(title), localKey),
+        content: await encrypt(String(content), localKey),
+        dateAdded: n.dateAdded ?? Date.now(),
+        dateModified: n.dateModified ?? Date.now(),
+      })
+    } catch (err) {
+      console.error(`Import: note ${i} failed (title="${n.title}")`, err)
+      // Skip this note — better to import partial data than crash entirely.
+    }
+  }
 
-    // ── Re-encrypt passwords (skipping duplicates) ─────────────────
+  // ── Re-encrypt passwords (skipping duplicates) ─────────────────
 
-    const newPasswords = vaultData.passwords.filter(
-      (p) => !existingPasswordKeys.has(`${p.siteName}|${p.username}`),
-    )
+  const newPasswords = (vaultData.passwords || []).filter(
+    (p) => !existingPasswordKeys.has(`${p.siteName}|${p.username}`),
+  )
 
-    encryptedPasswords = await Promise.all(
-      newPasswords.map(async (p) => ({
-        siteName: await encrypt(p.siteName, localKey),
-        siteUrl: p.siteUrl ? await encrypt(p.siteUrl, localKey) : undefined,
-        username: await encrypt(p.username, localKey),
-        password: await encrypt(p.password, localKey),
-        dateAdded: p.dateAdded,
-        dateModified: p.dateModified,
-      })),
-    )
-  } catch (err) {
-    console.error('Import: re-encrypting failed', err)
-    throw new Error(`Re-encryption failed: ${err instanceof Error ? err.message : String(err)}`)
+  type EncryptedPassword = {
+    siteName: string; siteUrl?: string; username: string;
+    password: string; dateAdded: number; dateModified: number
+  }
+  const encryptedPasswords: EncryptedPassword[] = []
+
+  for (let i = 0; i < newPasswords.length; i++) {
+    const p = newPasswords[i]
+    try {
+      // Validate and coerce all fields to strings. The decrypted vault data
+      // SHOULD have string fields, but if the export came from an older version
+      // or the JSON structure differs, we handle it gracefully.
+      const siteName = typeof p.siteName === 'string' ? p.siteName : String(p.siteName ?? '')
+      const username = typeof p.username === 'string' ? p.username : String(p.username ?? '')
+      const password = typeof p.password === 'string' ? p.password : String(p.password ?? '')
+      const siteUrl = p.siteUrl != null ? (typeof p.siteUrl === 'string' ? p.siteUrl : String(p.siteUrl)) : null
+
+      console.log(`Import: re-encrypting password ${i} site="${siteName}"`)
+
+      // Skip entries where critical fields are completely empty — these are
+      // likely corrupt entries that would be useless in the vault.
+      if (!siteName && !username && !password) {
+        console.warn(`Import: skipping password ${i} — all fields empty`)
+        continue
+      }
+
+      const entry: EncryptedPassword = {
+        siteName: await encrypt(siteName, localKey),
+        username: await encrypt(username, localKey),
+        password: await encrypt(password, localKey),
+        dateAdded: p.dateAdded ?? Date.now(),
+        dateModified: p.dateModified ?? Date.now(),
+      }
+
+      if (siteUrl) {
+        entry.siteUrl = await encrypt(siteUrl, localKey)
+      }
+
+      encryptedPasswords.push(entry)
+    } catch (err) {
+      console.error(`Import: password ${i} failed (site="${p.siteName}")`, err)
+      // Skip this password — better to import partial data than crash entirely.
+    }
   }
 
   // ── Stage 5: Write to DB ──────────────────────────────────────
