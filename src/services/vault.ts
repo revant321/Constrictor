@@ -159,9 +159,9 @@ export async function exportVault(): Promise<void> {
   const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH))
 
   const ciphertext = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
+    { name: 'AES-GCM', iv: iv.buffer },
     key,
-    encoded,
+    encoded.buffer,
   )
 
   // Build the .constrictor file.
@@ -284,9 +284,9 @@ export async function importVault(
     const iv = new Uint8Array(base64ToUint8(file.iv))
     const ciphertext = new Uint8Array(base64ToUint8(file.data))
     decryptedBytes = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv },
+      { name: 'AES-GCM', iv: iv.buffer },
       sourceKey,
-      ciphertext,
+      ciphertext.buffer,
     )
   } catch (err) {
     console.error('Import: decrypting failed', err)

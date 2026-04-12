@@ -103,7 +103,7 @@ export async function deriveKey(
   // object that the Web Crypto API can work with.
   const baseKey = await crypto.subtle.importKey(
     'raw',
-    keyMaterial,
+    keyMaterial.buffer,
     'PBKDF2',
     false,           // not extractable — we don't need to export this
     ['deriveKey'],   // this key is only used to derive another key
@@ -169,10 +169,15 @@ export async function encrypt(
 
   // Perform AES-256-GCM encryption.
   // The result includes both the ciphertext and the authentication tag.
+  //
+  // iOS Safari's Web Crypto requires actual ArrayBuffer objects — passing
+  // a Uint8Array directly causes OperationError. We extract .buffer from
+  // fresh arrays (iv is already fresh from getRandomValues, data is fresh
+  // from TextEncoder.encode).
   const ciphertext = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
+    { name: 'AES-GCM', iv: iv.buffer },
     key,
-    data,
+    data.buffer,
   )
 
   // Combine IV + ciphertext into a single byte array.
@@ -212,14 +217,16 @@ export async function decrypt(
   const combined = base64ToUint8(encryptedBase64)
 
   // Split: first 12 bytes are the IV, everything after is ciphertext + auth tag.
-  const iv = combined.slice(0, IV_LENGTH)
-  const ciphertext = combined.slice(IV_LENGTH)
+  // .slice() returns a NEW Uint8Array with its own backing buffer, but iOS
+  // Safari still wants explicit ArrayBuffer objects for Web Crypto operations.
+  const iv = new Uint8Array(combined.slice(0, IV_LENGTH))
+  const ciphertext = new Uint8Array(combined.slice(IV_LENGTH))
 
   // Decrypt. If the key is wrong, this throws a DOMException.
   const decrypted = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv },
+    { name: 'AES-GCM', iv: iv.buffer },
     key,
-    ciphertext,
+    ciphertext.buffer,
   )
 
   // Decode the decrypted bytes back into a UTF-8 string.
