@@ -25,6 +25,8 @@ import {
   encrypt,
   decrypt,
   createVerificationToken,
+  uint8ToBase64,
+  base64ToUint8,
   verifyCredentials,
 } from './crypto'
 
@@ -115,6 +117,18 @@ export async function setup(pin: string, masterPassword: string): Promise<void> 
     { key: 'setupComplete', value: true },
   ])
 
+  // Backup the salt to localStorage as a redundancy layer. The salt is not
+  // sensitive (it's stored unencrypted in IndexedDB anyway), but losing it
+  // means all encrypted data becomes unrecoverable. localStorage is a
+  // separate storage backend from IndexedDB, so if one gets wiped (e.g.,
+  // iOS evicting IndexedDB under storage pressure), the other may survive.
+  try {
+    localStorage.setItem('constrictor-salt-backup', uint8ToBase64(salt))
+  } catch {
+    // localStorage might be unavailable (private browsing, quota exceeded).
+    // Non-fatal — the primary copy in IndexedDB is what matters.
+  }
+
   // Step 5: Keep the key in memory — user is now unlocked.
   encryptionKey = key
 }
@@ -150,8 +164,25 @@ export async function login(
   masterPassword: string,
 ): Promise<boolean> {
   // Step 1: Read salt and verification token from DB.
-  const saltEntry = await db.meta.get('salt')
+  let saltEntry = await db.meta.get('salt')
   const tokenEntry = await db.meta.get('verificationToken')
+
+  // If the salt is missing but we have a localStorage backup, restore it.
+  // This handles the case where IndexedDB was partially wiped (e.g., iOS
+  // storage eviction) but localStorage survived.
+  if (!saltEntry && tokenEntry) {
+    try {
+      const backup = localStorage.getItem('constrictor-salt-backup')
+      if (backup) {
+        const restored = Array.from(base64ToUint8(backup))
+        await db.meta.put({ key: 'salt', value: restored })
+        saltEntry = await db.meta.get('salt')
+        console.log('Salt restored from localStorage backup')
+      }
+    } catch {
+      // Restoration failed — fall through to the check below.
+    }
+  }
 
   // If either is missing, the vault is corrupted or setup never completed.
   if (!saltEntry || !tokenEntry) {

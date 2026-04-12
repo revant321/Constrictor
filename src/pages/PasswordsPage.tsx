@@ -68,18 +68,22 @@ export default function PasswordsPage() {
 
     const rows = await db.passwords.toArray()
 
-    // Decrypt all fields in parallel for each row.
-    // Promise.all on the outer array processes all rows concurrently.
-    // For each row, we decrypt its 3 encrypted fields in parallel too.
-    const decrypted = await Promise.all(
-      rows.map(async (row) => {
-        const [siteName, siteUrl, username, password] = await Promise.all([
-          decrypt(row.siteName, key),
-          row.siteUrl ? decrypt(row.siteUrl, key) : Promise.resolve(''),
-          decrypt(row.username, key),
-          decrypt(row.password, key),
-        ])
-        return {
+    // Decrypt each row in its own try/catch. Entries encrypted with an
+    // old/lost key will fail AES-GCM auth tag verification — skip them
+    // silently so valid entries still display.
+    const decrypted: typeof passwords = []
+    for (const row of rows) {
+      try {
+        const siteName = await decrypt(row.siteName, key)
+        const username = await decrypt(row.username, key)
+        const password = await decrypt(row.password, key)
+
+        let siteUrl = ''
+        if (row.siteUrl && typeof row.siteUrl === 'string' && row.siteUrl.length > 0) {
+          siteUrl = await decrypt(row.siteUrl, key)
+        }
+
+        decrypted.push({
           id: row.id!,
           siteName,
           siteUrl,
@@ -87,9 +91,11 @@ export default function PasswordsPage() {
           password,
           dateAdded: row.dateAdded,
           dateModified: row.dateModified,
-        }
-      })
-    )
+        })
+      } catch {
+        console.warn(`Password ${row.id}: skipping — decrypt failed (wrong key or corrupt data)`)
+      }
+    }
 
     // Sort alphabetically by site name (case-insensitive).
     decrypted.sort((a, b) => a.siteName.localeCompare(b.siteName, undefined, { sensitivity: 'base' }))
@@ -119,10 +125,12 @@ export default function PasswordsPage() {
     const key = getKey()
     if (!key) return
 
-    // Encrypt all fields in parallel. siteUrl is optional — only encrypt if provided.
+    // Encrypt all fields in parallel. siteUrl is optional — only encrypt
+    // if it's a non-empty string (trim to catch whitespace-only input).
+    const trimmedUrl = siteUrl?.trim() || ''
     const [encSite, encUrl, encUser, encPass] = await Promise.all([
       encrypt(siteName, key),
-      siteUrl ? encrypt(siteUrl, key) : Promise.resolve(undefined),
+      trimmedUrl ? encrypt(trimmedUrl, key) : Promise.resolve(undefined),
       encrypt(username, key),
       encrypt(password, key),
     ])

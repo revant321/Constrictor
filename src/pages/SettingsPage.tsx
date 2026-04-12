@@ -856,7 +856,7 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
 
           {/* Version info — small footer */}
           <div className="settings-footer">
-            Constrictor v2.0 — Added Face ID + Touch ID
+            Constrictor v2.9
           </div>
         </div>
       </>
