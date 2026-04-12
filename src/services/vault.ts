@@ -222,8 +222,21 @@ export async function importVault(
   pin: string,
   masterPassword: string,
 ): Promise<{ passwords: number; notes: number; categories: number }> {
-  // Parse and validate the file.
-  const file: ConstrictorFile = JSON.parse(fileContent)
+  // ── Stage 1: Parse the file ─────────────────────────────────────
+  //
+  // iOS Safari's FileReader can sometimes prepend a UTF-8 BOM character
+  // (\uFEFF) or include trailing whitespace/newlines that break JSON.parse.
+  // We strip those before parsing to handle cross-platform edge cases.
+
+  let file: ConstrictorFile
+  try {
+    console.log('Import: parsing file')
+    const cleaned = fileContent.trim().replace(/^\uFEFF/, '')
+    file = JSON.parse(cleaned)
+  } catch (err) {
+    console.error('Import: parsing file failed', err)
+    throw new Error(`File parsing failed: ${err instanceof Error ? err.message : String(err)}`)
+  }
 
   if (file.version !== 1) {
     throw new Error(`Unsupported file version: ${file.version}`)
@@ -232,139 +245,182 @@ export async function importVault(
     throw new Error('Invalid file format: missing required fields')
   }
 
-  // Derive the SOURCE key from the provided credentials + embedded salt.
-  // This is the key that was used to encrypt the data on the other device.
-  const sourceSalt = base64ToUint8(file.salt)
-  const sourceKey = await deriveKey(pin, masterPassword, sourceSalt)
+  // ── Stage 2: Derive the source key ──────────────────────────────
+  //
+  // The salt from the file is base64-encoded. We decode it to a Uint8Array
+  // before passing to deriveKey. If this step produces an incorrect key
+  // (e.g., corrupted base64), decryption will fail in the next stage.
 
-  // Decrypt the data blob.
-  // If the credentials are wrong, AES-GCM will throw (auth tag mismatch).
-  const iv = base64ToUint8(file.iv)
-  const ciphertext = base64ToUint8(file.data)
+  let sourceKey: CryptoKey
+  try {
+    console.log('Import: deriving key')
+    const sourceSalt = base64ToUint8(file.salt)
+    // Validate salt is a reasonable length (our PBKDF2 uses 16-byte salts)
+    if (sourceSalt.length === 0) {
+      throw new Error('Salt decoded to empty array — possible base64 corruption')
+    }
+    sourceKey = await deriveKey(pin, masterPassword, sourceSalt)
+  } catch (err) {
+    console.error('Import: deriving key failed', err)
+    throw new Error(`Key derivation failed: ${err instanceof Error ? err.message : String(err)}`)
+  }
+
+  // ── Stage 3: Decrypt the data blob ──────────────────────────────
+  //
+  // AES-GCM decryption. If the credentials are wrong, the authentication
+  // tag won't match and crypto.subtle.decrypt throws a DOMException with
+  // "The operation failed" — an intentionally vague message from Web Crypto.
 
   let decryptedBytes: ArrayBuffer
   try {
+    console.log('Import: decrypting')
+    const iv = base64ToUint8(file.iv)
+    const ciphertext = base64ToUint8(file.data)
     decryptedBytes = await crypto.subtle.decrypt(
       { name: 'AES-GCM', iv: iv as BufferSource },
       sourceKey,
       ciphertext as BufferSource,
     )
-  } catch {
+  } catch (err) {
+    console.error('Import: decrypting failed', err)
     throw new Error('Decryption failed — wrong PIN or password for this file')
   }
 
-  const json = new TextDecoder().decode(decryptedBytes)
-  const vaultData: VaultData = JSON.parse(json)
+  // Parse the decrypted JSON. If decryption "succeeded" but produced
+  // garbage (unlikely with AES-GCM's auth tag, but defensive), this catch
+  // will report it clearly.
+  let vaultData: VaultData
+  try {
+    const json = new TextDecoder().decode(decryptedBytes)
+    vaultData = JSON.parse(json)
+  } catch (err) {
+    console.error('Import: parsing decrypted data failed', err)
+    throw new Error(`Decrypted data is not valid JSON: ${err instanceof Error ? err.message : String(err)}`)
+  }
 
   // Get the LOCAL key — we'll re-encrypt everything with this.
   const localKey = getKey()
   if (!localKey) throw new Error('Vault is locked')
 
-  // ── Decrypt existing vault entries for duplicate detection ─────
+  // ── Stage 4: Re-encrypt with local key ─────────────────────────
   //
-  // To detect duplicates we need to compare plaintext values.
-  // We decrypt all existing entries once up front so we can do
-  // fast in-memory lookups against the incoming data.
+  // Decrypt existing vault entries for duplicate detection, then
+  // re-encrypt imported entries with the local device's key.
 
-  const existingPasswords = await db.passwords.toArray()
-  const existingNotes = await db.notes.toArray()
-  const existingCategories = await db.noteCategories.toArray()
-
-  // Build Sets of "siteName|username" for password dedup.
-  // We use a pipe delimiter — same idea as the colon in key derivation:
-  // it prevents "site" + "name|user" from colliding with "site|name" + "user".
-  const existingPasswordKeys = new Set<string>()
-  for (const p of existingPasswords) {
-    const site = await decrypt(p.siteName, localKey)
-    const user = await decrypt(p.username, localKey)
-    existingPasswordKeys.add(`${site}|${user}`)
-  }
-
-  // Build Sets of "title|content" for note dedup.
-  const existingNoteKeys = new Set<string>()
-  for (const n of existingNotes) {
-    const title = await decrypt(n.title, localKey)
-    const content = await decrypt(n.content, localKey)
-    existingNoteKeys.add(`${title}|${content}`)
-  }
-
-  // Build a Map of decrypted category name → existing local ID for category dedup.
-  // If an imported category already exists locally, we reuse the local ID
-  // instead of creating a duplicate row.
-  const existingCategoryMap = new Map<string, number>()
-  for (const c of existingCategories) {
-    const name = await decrypt(c.name, localKey)
-    existingCategoryMap.set(name, c.id!)
-  }
-
-  // ── Insert categories first (to get new IDs for mapping) ───────
-
-  // Build a map: source category ID → local ID.
-  // If a category with the same name already exists, reuse its ID.
-  // Otherwise insert a new row and use the new ID.
-  const categoryIdMap = new Map<number, number>()
+  let encryptedPasswords: Array<{
+    siteName: string; siteUrl?: string; username: string;
+    password: string; dateAdded: number; dateModified: number
+  }> = []
+  let encryptedNotes: Array<{
+    categoryId?: number; title: string; content: string;
+    dateAdded: number; dateModified: number
+  }> = []
   let categoriesAdded = 0
 
-  for (const cat of vaultData.noteCategories) {
-    const existingId = existingCategoryMap.get(cat.name)
-    if (existingId != null) {
-      // Category already exists locally — skip insertion, reuse existing ID.
-      categoryIdMap.set(cat.id, existingId)
-    } else {
-      const newId = await db.noteCategories.add({
-        name: await encrypt(cat.name, localKey),
-        color: cat.color,
-        order: cat.order,
-        dateAdded: cat.dateAdded,
-      })
-      categoryIdMap.set(cat.id, newId)
-      categoriesAdded++
+  try {
+    console.log('Import: re-encrypting')
+
+    const existingPasswords = await db.passwords.toArray()
+    const existingNotes = await db.notes.toArray()
+    const existingCategories = await db.noteCategories.toArray()
+
+    // Build Sets of "siteName|username" for password dedup.
+    const existingPasswordKeys = new Set<string>()
+    for (const p of existingPasswords) {
+      const site = await decrypt(p.siteName, localKey)
+      const user = await decrypt(p.username, localKey)
+      existingPasswordKeys.add(`${site}|${user}`)
     }
+
+    // Build Sets of "title|content" for note dedup.
+    const existingNoteKeys = new Set<string>()
+    for (const n of existingNotes) {
+      const title = await decrypt(n.title, localKey)
+      const content = await decrypt(n.content, localKey)
+      existingNoteKeys.add(`${title}|${content}`)
+    }
+
+    // Build a Map of decrypted category name → existing local ID for category dedup.
+    const existingCategoryMap = new Map<string, number>()
+    for (const c of existingCategories) {
+      const name = await decrypt(c.name, localKey)
+      existingCategoryMap.set(name, c.id!)
+    }
+
+    // ── Insert categories first (to get new IDs for mapping) ───────
+
+    const categoryIdMap = new Map<number, number>()
+
+    for (const cat of vaultData.noteCategories) {
+      const existingId = existingCategoryMap.get(cat.name)
+      if (existingId != null) {
+        categoryIdMap.set(cat.id, existingId)
+      } else {
+        const newId = await db.noteCategories.add({
+          name: await encrypt(cat.name, localKey),
+          color: cat.color,
+          order: cat.order,
+          dateAdded: cat.dateAdded,
+        })
+        categoryIdMap.set(cat.id, newId)
+        categoriesAdded++
+      }
+    }
+
+    // ── Re-encrypt notes (with remapped categoryIds, skipping duplicates) ──
+
+    const newNotes = vaultData.notes.filter(
+      (n) => !existingNoteKeys.has(`${n.title}|${n.content}`),
+    )
+
+    encryptedNotes = await Promise.all(
+      newNotes.map(async (n) => ({
+        categoryId: n.categoryId != null
+          ? categoryIdMap.get(n.categoryId)
+          : undefined,
+        title: await encrypt(n.title, localKey),
+        content: await encrypt(n.content, localKey),
+        dateAdded: n.dateAdded,
+        dateModified: n.dateModified,
+      })),
+    )
+
+    // ── Re-encrypt passwords (skipping duplicates) ─────────────────
+
+    const newPasswords = vaultData.passwords.filter(
+      (p) => !existingPasswordKeys.has(`${p.siteName}|${p.username}`),
+    )
+
+    encryptedPasswords = await Promise.all(
+      newPasswords.map(async (p) => ({
+        siteName: await encrypt(p.siteName, localKey),
+        siteUrl: p.siteUrl ? await encrypt(p.siteUrl, localKey) : undefined,
+        username: await encrypt(p.username, localKey),
+        password: await encrypt(p.password, localKey),
+        dateAdded: p.dateAdded,
+        dateModified: p.dateModified,
+      })),
+    )
+  } catch (err) {
+    console.error('Import: re-encrypting failed', err)
+    throw new Error(`Re-encryption failed: ${err instanceof Error ? err.message : String(err)}`)
   }
 
-  // ── Insert notes (with remapped categoryIds, skipping duplicates) ──
+  // ── Stage 5: Write to DB ──────────────────────────────────────
 
-  // Filter out notes that already exist (same title AND content).
-  const newNotes = vaultData.notes.filter(
-    (n) => !existingNoteKeys.has(`${n.title}|${n.content}`),
-  )
+  try {
+    console.log('Import: writing to DB')
 
-  const encryptedNotes = await Promise.all(
-    newNotes.map(async (n) => ({
-      categoryId: n.categoryId != null
-        ? categoryIdMap.get(n.categoryId)
-        : undefined,
-      title: await encrypt(n.title, localKey),
-      content: await encrypt(n.content, localKey),
-      dateAdded: n.dateAdded,
-      dateModified: n.dateModified,
-    })),
-  )
+    if (encryptedNotes.length > 0) {
+      await db.notes.bulkAdd(encryptedNotes)
+    }
 
-  if (encryptedNotes.length > 0) {
-    await db.notes.bulkAdd(encryptedNotes)
-  }
-
-  // ── Insert passwords (skipping duplicates) ─────────────────────
-
-  // Filter out passwords that already exist (same siteName AND username).
-  const newPasswords = vaultData.passwords.filter(
-    (p) => !existingPasswordKeys.has(`${p.siteName}|${p.username}`),
-  )
-
-  const encryptedPasswords = await Promise.all(
-    newPasswords.map(async (p) => ({
-      siteName: await encrypt(p.siteName, localKey),
-      siteUrl: p.siteUrl ? await encrypt(p.siteUrl, localKey) : undefined,
-      username: await encrypt(p.username, localKey),
-      password: await encrypt(p.password, localKey),
-      dateAdded: p.dateAdded,
-      dateModified: p.dateModified,
-    })),
-  )
-
-  if (encryptedPasswords.length > 0) {
-    await db.passwords.bulkAdd(encryptedPasswords)
+    if (encryptedPasswords.length > 0) {
+      await db.passwords.bulkAdd(encryptedPasswords)
+    }
+  } catch (err) {
+    console.error('Import: writing to DB failed', err)
+    throw new Error(`Database write failed: ${err instanceof Error ? err.message : String(err)}`)
   }
 
   return {

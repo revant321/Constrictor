@@ -44,6 +44,7 @@
   --text-dim: rgba(255, 255, 255, 0.35);
   --text-muted: rgba(255, 255, 255, 0.25);
   --text-faint: rgba(255, 255, 255, 0.2);
+  --biometric-skip-color: rgba(255, 255, 255, 0.25);
 
   /* Navigation */
   --nav-bg: rgba(15, 17, 23, 0.85);
@@ -125,6 +126,7 @@
   --text-dim: rgba(0, 0, 0, 0.35);
   --text-muted: rgba(0, 0, 0, 0.25);
   --text-faint: rgba(0, 0, 0, 0.15);
+  --biometric-skip-color: rgba(0, 0, 0, 0.2);
 
   /* Navigation */
   --nav-bg: rgba(242, 242, 247, 0.85);

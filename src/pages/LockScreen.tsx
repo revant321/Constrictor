@@ -96,6 +96,16 @@ export default function LockScreen({ onLogin }: LockScreenProps) {
   const [biometricError, setBiometricError] = useState('')
   const [biometricVerifying, setBiometricVerifying] = useState(false)
 
+  // ── Failed biometric attempts tracking ──────────────────────────
+  //
+  // After 3 consecutive biometric failures, we reveal a hidden escape
+  // hatch: the page becomes scrollable with several screen-heights of
+  // empty spacers, and a tiny near-invisible "Use PIN instead" link
+  // at the very bottom. This is intentionally obscure — an attacker
+  // won't know to scroll, but the legitimate user can figure it out.
+  // Still secure because PIN + password are required to decrypt anything.
+  const [failedBiometricAttempts, setFailedBiometricAttempts] = useState(0)
+
   // ── Brute-force protection state ────────────────────────────────
   //
   // failedAttempts: incremented on each wrong login. Reset on success
@@ -200,8 +210,11 @@ export default function LockScreen({ onLogin }: LockScreenProps) {
     setBiometricVerifying(false)
 
     if (passed) {
+      // Success — reset the failure counter and advance to PIN.
+      setFailedBiometricAttempts(0)
       setStage('pin')
     } else {
+      setFailedBiometricAttempts(prev => prev + 1)
       setBiometricError('Biometric verification failed')
     }
   }, [])
@@ -247,8 +260,9 @@ export default function LockScreen({ onLogin }: LockScreenProps) {
     const success = await onLogin(pin, inputValue)
 
     if (success) {
-      // Login succeeded — useAuth will set status to "unlocked" and the
-      // parent (App.tsx AuthGate) will unmount this component.
+      // Login succeeded — reset biometric counter (component will unmount
+      // anyway, but good hygiene) and useAuth transitions to "unlocked".
+      setFailedBiometricAttempts(0)
       return
     }
 
@@ -293,8 +307,21 @@ export default function LockScreen({ onLogin }: LockScreenProps) {
     ? Math.max(0, (lockoutUntil - Date.now()) / LOCKOUT_DURATION)
     : 0
 
+  // Should the biometric stage be scrollable (escape hatch active)?
+  // Only after 3+ consecutive biometric failures AND we're on the biometric stage.
+  const biometricEscapeActive = stage === 'biometric' && failedBiometricAttempts >= 3
+
   return (
-    <div className="screen-center">
+    <div
+      className="screen-center"
+      style={biometricEscapeActive ? {
+        // Override the default centering: switch to top-aligned scrollable
+        // layout so the spacers + hidden link are reachable by scrolling.
+        overflowY: 'auto',
+        justifyContent: 'flex-start',
+        paddingTop: '25vh',
+      } : undefined}
+    >
       {/* Lock icon — SVG inside a frosted glass circle.
        *  Hidden during the biometric stage because that stage has its own
        *  larger icon (fingerprint). Showing both would be redundant. */}
@@ -407,8 +434,7 @@ export default function LockScreen({ onLogin }: LockScreenProps) {
               : `Use ${getBiometricType()} to continue`}
           </p>
 
-          {/* Error state — show a Retry button when verification fails.
-           *  The user must pass biometrics to proceed; there's no skip option. */}
+          {/* Error state — show a Retry button when verification fails. */}
           {biometricError && !biometricVerifying && (
             <button
               className="glass-btn glass-btn-primary"
@@ -417,6 +443,48 @@ export default function LockScreen({ onLogin }: LockScreenProps) {
             >
               Retry {getBiometricType()}
             </button>
+          )}
+
+          {/* ── Hidden escape hatch after 3 failed biometric attempts ──
+           *
+           * After 3 consecutive failures, we add ~4 screen-heights of empty
+           * spacers below the biometric UI, then a tiny near-invisible
+           * "Use PIN instead" link at the very bottom. The parent container
+           * becomes scrollable (overflow-y: auto) so the user CAN reach it
+           * if they know to scroll — but it's not obvious.
+           *
+           * This is still secure: biometrics are just a convenience gate.
+           * The user must still enter the correct PIN + master password to
+           * derive the decryption key. An attacker who skips biometrics
+           * gains nothing without both credentials. */}
+          {failedBiometricAttempts >= 3 && (
+            <>
+              <div style={{ minHeight: '100vh', width: '100%' }} aria-hidden="true" />
+              <div style={{ minHeight: '100vh', width: '100%' }} aria-hidden="true" />
+              <div style={{ minHeight: '100vh', width: '100%' }} aria-hidden="true" />
+              <div style={{ minHeight: '80vh', width: '100%' }} aria-hidden="true" />
+              <button
+                onClick={() => {
+                  setFailedBiometricAttempts(0)
+                  setStage('pin')
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  fontSize: '12px',
+                  color: 'var(--biometric-skip-color, rgba(255, 255, 255, 0.25))',
+                  cursor: 'pointer',
+                  padding: '12px 24px',
+                  paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))',
+                  fontFamily: 'inherit',
+                  textAlign: 'center',
+                  width: '100%',
+                  WebkitTapHighlightColor: 'transparent',
+                }}
+              >
+                Use PIN instead
+              </button>
+            </>
           )}
         </div>
       )}

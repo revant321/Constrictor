@@ -38,8 +38,11 @@ import {
   useCallback,
   type ReactNode,
 } from 'react'
+import { db } from '../services/db'
 
 // ─── Types ─────────────────────────────────────────────────────────
+
+type UpdateMode = 'manual' | 'auto'
 
 interface ServiceWorkerContextValue {
   /** True when a new SW is installed and waiting for activation */
@@ -68,15 +71,46 @@ export function ServiceWorkerProvider({ children }: { children: ReactNode }) {
     if (!('serviceWorker' in navigator) || !import.meta.env.PROD) return
 
     /**
+     * Helper — read the user's update preference from the meta table.
+     * Defaults to 'manual' if not set (the safe, existing behavior).
+     */
+    async function getUpdateMode(): Promise<UpdateMode> {
+      try {
+        const entry = await db.meta.get('updateMode')
+        return entry?.value === 'auto' ? 'auto' : 'manual'
+      } catch {
+        return 'manual'
+      }
+    }
+
+    /**
+     * Helper — handle a waiting SW based on the user's update mode.
+     * In 'auto' mode, skip the prompt and activate immediately.
+     * In 'manual' mode, surface the update to the UI for approval.
+     */
+    async function handleWaitingWorker(worker: ServiceWorker) {
+      const mode = await getUpdateMode()
+
+      if (mode === 'auto') {
+        // Auto mode — activate the new SW immediately. The browser fires
+        // 'controllerchange' and our main.tsx listener reloads the page.
+        worker.postMessage({ type: 'SKIP_WAITING' })
+      } else {
+        // Manual mode — show the update prompt in the UI.
+        setWaitingWorker(worker)
+        setUpdateAvailable(true)
+        setUpdateDismissed(false)
+      }
+    }
+
+    /**
      * Helper — watch a SW that's installing and promote it to
      * "update available" once it reaches the 'installed' (waiting) state.
      */
     function watchInstalling(worker: ServiceWorker, registration: ServiceWorkerRegistration) {
       worker.addEventListener('statechange', () => {
         if (worker.state === 'installed' && registration.active) {
-          setWaitingWorker(worker)
-          setUpdateAvailable(true)
-          setUpdateDismissed(false)
+          handleWaitingWorker(worker)
         }
       })
     }
@@ -89,8 +123,7 @@ export function ServiceWorkerProvider({ children }: { children: ReactNode }) {
       // previous update — the new SW has been sitting in "waiting"
       // state since then.
       if (registration.waiting) {
-        setWaitingWorker(registration.waiting)
-        setUpdateAvailable(true)
+        handleWaitingWorker(registration.waiting)
         return
       }
 

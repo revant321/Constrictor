@@ -26,7 +26,7 @@
  *      use cache-first (fall back to network, then cache the response).
  */
 
-const CACHE_VERSION = 'constrictor-v2.3';
+const CACHE_VERSION = 'constrictor-v2.5';
 
 const INDEX_HTML = '/Constrictor/index.html';
 

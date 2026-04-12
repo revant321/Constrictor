@@ -110,6 +110,25 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
     setNoteSortModeState(mode)
   }
 
+  // ─── Update mode state ──────────────────────────────────────────────
+  //
+  // Two options: 'manual' (default — show update prompt, user decides)
+  // or 'auto' (new SWs activate immediately without prompting).
+  // Stored in the meta table as 'updateMode'.
+
+  const [updateMode, setUpdateModeState] = useState<'manual' | 'auto'>('manual')
+
+  useEffect(() => {
+    db.meta.get('updateMode').then(entry => {
+      if (entry?.value === 'auto') setUpdateModeState('auto')
+    })
+  }, [])
+
+  const handleSetUpdateMode = async (mode: 'manual' | 'auto') => {
+    await db.meta.put({ key: 'updateMode', value: mode })
+    setUpdateModeState(mode)
+  }
+
   // ─── Biometric unlock state ────────────────────────────────────────
   //
   // Three pieces of state:
@@ -308,7 +327,9 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
 
     const reader = new FileReader()
     reader.onload = () => {
-      const content = reader.result as string
+      // Strip BOM and whitespace — iOS Safari's FileReader can prepend
+      // a UTF-8 BOM (\uFEFF) that breaks JSON.parse.
+      const content = (reader.result as string).trim().replace(/^\uFEFF/, '')
       // Quick validation: check it's valid JSON with a version field.
       try {
         const parsed = JSON.parse(content)
@@ -634,6 +655,43 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
             </div>
           </div>
 
+          {/* ── Updates Section ──────────────────────────────────────
+           *
+           * Controls how service worker updates are handled.
+           * 'Manual' (default): user sees a prompt after login and must
+           *   approve the update. If dismissed, it appears as a card in Settings.
+           * 'Auto': new SWs are activated immediately via skipWaiting —
+           *   the page reloads with the new version on next open.
+           *
+           * Uses the same segmented control pattern as Appearance and
+           * Notes sort mode for visual consistency.
+           */}
+          <div className="settings-section">
+            <h3 className="settings-section-title">Updates</h3>
+
+            <div className="glass-card settings-card">
+              <div className="settings-row-text" style={{ marginBottom: '12px' }}>
+                <div className="settings-row-label">Update mode</div>
+                <div className="settings-row-description">
+                  {updateMode === 'manual'
+                    ? 'Review and approve updates before they are applied'
+                    : 'Updates are applied automatically when available'}
+                </div>
+              </div>
+              <div className="appearance-segment">
+                {(['manual', 'auto'] as const).map((opt) => (
+                  <button
+                    key={opt}
+                    className={`appearance-segment-btn${updateMode === opt ? ' active' : ''}`}
+                    onClick={() => handleSetUpdateMode(opt)}
+                  >
+                    {opt === 'manual' ? 'Manual' : 'Auto'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
           {/* Lock Behavior Toggle */}
           <div className="settings-section">
             <h3 className="settings-section-title">Security</h3>
@@ -767,7 +825,7 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
             <input
               ref={fileInputRef}
               type="file"
-              accept="*/*"
+              accept=".constrictor,.json"
               onChange={handleFileSelect}
               style={{ display: 'none' }}
             />
