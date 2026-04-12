@@ -354,13 +354,15 @@ export async function importVault(
     const cat = vaultData.noteCategories[i]
     try {
       const catName = cat.name ?? ''
-      console.log(`Import: re-encrypting category ${i} name="${catName}"`)
+      console.log(`Import: encrypting category ${i} name="${catName}"`)
       const existingId = existingCategoryMap.get(catName)
       if (existingId != null) {
         categoryIdMap.set(cat.id, existingId)
       } else {
+        const encName = await encrypt(catName, localKey)
+        console.log(`Import: category ${i} encrypted OK`)
         const newId = await db.noteCategories.add({
-          name: await encrypt(catName, localKey),
+          name: encName,
           color: cat.color || 'blue',
           order: cat.order ?? i,
           dateAdded: cat.dateAdded ?? Date.now(),
@@ -389,27 +391,30 @@ export async function importVault(
   for (let i = 0; i < newNotes.length; i++) {
     const n = newNotes[i]
     try {
-      // Validate required fields — coerce undefined/null to empty string.
-      // iOS Safari's Web Crypto throws an opaque error if TextEncoder.encode()
-      // receives a non-string value (undefined becomes "undefined" on desktop
-      // Chrome/Safari but can fail on iOS).
-      const title = typeof n.title === 'string' ? n.title : (n.title ?? '')
-      const content = typeof n.content === 'string' ? n.content : (n.content ?? '')
+      const title = typeof n.title === 'string' ? n.title : String(n.title ?? '')
+      const content = typeof n.content === 'string' ? n.content : String(n.content ?? '')
 
-      console.log(`Import: re-encrypting note ${i} title="${title.slice(0, 30)}"`)
+      console.log(`Import: encrypting note ${i}/${newNotes.length} title="${title.slice(0, 30)}"`)
+
+      // Encrypt fields ONE AT A TIME — iOS Safari's Web Crypto chokes on
+      // concurrent crypto operations. Sequential awaits ensure only one
+      // encrypt() call is in-flight at any moment.
+      const encTitle = await encrypt(title, localKey)
+      const encContent = await encrypt(content, localKey)
+
+      console.log(`Import: note ${i} encrypted OK`)
 
       encryptedNotes.push({
         categoryId: n.categoryId != null
           ? categoryIdMap.get(n.categoryId)
           : undefined,
-        title: await encrypt(String(title), localKey),
-        content: await encrypt(String(content), localKey),
+        title: encTitle,
+        content: encContent,
         dateAdded: n.dateAdded ?? Date.now(),
         dateModified: n.dateModified ?? Date.now(),
       })
     } catch (err) {
       console.error(`Import: note ${i} failed (title="${n.title}")`, err)
-      // Skip this note — better to import partial data than crash entirely.
     }
   }
 
@@ -436,25 +441,32 @@ export async function importVault(
       const password = typeof p.password === 'string' ? p.password : String(p.password ?? '')
       const siteUrl = p.siteUrl != null ? (typeof p.siteUrl === 'string' ? p.siteUrl : String(p.siteUrl)) : null
 
-      console.log(`Import: re-encrypting password ${i} site="${siteName}"`)
+      console.log(`Import: encrypting password ${i}/${newPasswords.length} site="${siteName}"`)
 
-      // Skip entries where critical fields are completely empty — these are
-      // likely corrupt entries that would be useless in the vault.
       if (!siteName && !username && !password) {
         console.warn(`Import: skipping password ${i} — all fields empty`)
         continue
       }
 
+      // Encrypt fields ONE AT A TIME — sequential awaits to avoid
+      // overwhelming iOS Safari's Web Crypto.
+      const encSiteName = await encrypt(siteName, localKey)
+      const encUsername = await encrypt(username, localKey)
+      const encPassword = await encrypt(password, localKey)
+      const encSiteUrl = siteUrl ? await encrypt(siteUrl, localKey) : undefined
+
+      console.log(`Import: password ${i} encrypted OK`)
+
       const entry: EncryptedPassword = {
-        siteName: await encrypt(siteName, localKey),
-        username: await encrypt(username, localKey),
-        password: await encrypt(password, localKey),
+        siteName: encSiteName,
+        username: encUsername,
+        password: encPassword,
         dateAdded: p.dateAdded ?? Date.now(),
         dateModified: p.dateModified ?? Date.now(),
       }
 
-      if (siteUrl) {
-        entry.siteUrl = await encrypt(siteUrl, localKey)
+      if (encSiteUrl) {
+        entry.siteUrl = encSiteUrl
       }
 
       encryptedPasswords.push(entry)
