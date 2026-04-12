@@ -825,7 +825,7 @@ export default function SettingsPage({ onClose }: { onClose: () => void }) {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".constrictor,.json"
+              accept="*/*"
               onChange={handleFileSelect}
               style={{ display: 'none' }}
             />
